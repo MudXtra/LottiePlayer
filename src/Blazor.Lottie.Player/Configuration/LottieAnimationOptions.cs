@@ -1,7 +1,7 @@
 namespace Blazor.Lottie.Player;
 
 /// <summary>
-/// Represents the configuration options for rendering Lottie animations.
+/// Represents the advanced configuration options for rendering Lottie animations.
 /// </summary>
 public class LottieAnimationOptions
 {
@@ -28,4 +28,40 @@ public class LottieAnimationOptions
     /// pixel-perfect reproduction of the original animation timing.</para>
     /// </remarks>
     public bool SmoothFrameInterpolation { get; set; } = true;
+
+    /// <summary>
+    /// Determines whether the specified object is equal to the current instance.
+    /// </summary>
+    /// <remarks>Two instances are considered equal if they have the same <see cref="LottieSourceJs"/>,  <see
+    /// cref="AnimationQuality"/>, and <see cref="SmoothFrameInterpolation"/> values.</remarks>
+    /// <param name="obj">The object to compare with the current instance.</param>
+    /// <returns><see langword="true"/> if the specified object is equal to the current instance;  otherwise, <see
+    /// langword="false"/>.</returns>
+    public override bool Equals(object? obj)
+    {
+        if (ReferenceEquals(this, obj))
+            return true;
+        if (obj is not LottieAnimationOptions other)
+            return false;
+
+        return string.Equals(LottieSourceJs, other.LottieSourceJs, StringComparison.Ordinal)
+            && AnimationQuality == other.AnimationQuality
+            && SmoothFrameInterpolation == other.SmoothFrameInterpolation;
+    }
+
+    /// <summary>
+    /// Returns a hash code for the current object.
+    /// </summary>
+    /// <remarks>The hash code is computed based on the values of the <see cref="LottieSourceJs"/>,  <see
+    /// cref="AnimationQuality"/>, and <see cref="SmoothFrameInterpolation"/> properties.  This ensures that objects
+    /// with the same property values produce the same hash code.</remarks>
+    /// <returns>An integer hash code that represents the current object.</returns>
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(
+            LottieSourceJs != null ? StringComparer.Ordinal.GetHashCode(LottieSourceJs) : 0,
+            AnimationQuality,
+            SmoothFrameInterpolation
+        );
+    }
 }

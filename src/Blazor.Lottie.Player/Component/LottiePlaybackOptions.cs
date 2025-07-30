@@ -1,5 +1,5 @@
 
-namespace Blazor.Lottie.Player.Serialization;
+namespace Blazor.Lottie.Player;
 /// <summary>
 /// Configuration options for Lottie animation playback and rendering.
 /// </summary>
@@ -54,7 +54,7 @@ public class LottiePlaybackOptions
     /// Whether to enable the enterFrame event.
     /// </summary>
     /// <remarks>
-    /// If <see cref="CurrentFrameChangeFunc"/> is null this should be false.
+    /// If <c>CurrentFrameChangedFunc</c> is null this should be false.
     /// </remarks>
     public bool EnterFrameEvent { get; set; } = false;
 }

@@ -1,4 +1,7 @@
 namespace Blazor.Lottie.Player;
+/// <summary>
+/// Event arguments for the Lottie player loaded event.
+/// </summary>
 public record LottiePlayerLoadedEventArgs
 {
     /// <summary>

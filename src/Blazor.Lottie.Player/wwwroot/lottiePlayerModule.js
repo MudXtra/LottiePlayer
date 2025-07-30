@@ -64,23 +64,31 @@ function addEvents(elementRef) {
         const dotNetAdapter = stored.dotNetRef;
 
         // Add event listeners
+        animation.addEventListener('dataready', () => {
+            const eventArgs = {
+                elementId: elementRef.id,
+                currentFrame: animation.currentFrame,
+                totalFrames: animation.totalFrames
+            };
+            invokeDotNetMethodAsync(dotNetAdapter, "AnimationReadyEventAsync", eventArgs);
+        });
         animation.addEventListener('DOMLoaded', () => {
             const eventArgs = {
                 elementId: elementRef.id,
                 currentFrame: animation.currentFrame,
                 totalFrames: animation.totalFrames
             };
-            invokeDotNetMethodAsync(dotNetAdapter, "OnLoaded", eventArgs);
+            invokeDotNetMethodAsync(dotNetAdapter, "DOMLoadedEventAsync", eventArgs);
         });
         animation.addEventListener('complete', () => {
-            invokeDotNetMethodAsync(dotNetAdapter, 'OnComplete');
+            invokeDotNetMethodAsync(dotNetAdapter, 'CompleteEventAsync');
         });
         animation.addEventListener('loopComplete', () => {
-            invokeDotNetMethodAsync(dotNetAdapter, 'OnLoopComplete');
+            invokeDotNetMethodAsync(dotNetAdapter, 'LoopCompleteEventAsync');
         });
         if (options.enterFrameEvent) {
             animation.addEventListener('enterFrame', (e) => {
-                invokeDotNetMethodAsync(dotNetAdapter, 'OnEnterFrame', e);
+                invokeDotNetMethodAsync(dotNetAdapter, 'EnterFrameEventAsync', e);
             });
         }
         return true;
@@ -117,6 +125,24 @@ export function stop(elementRef) {
     const stored = blazorLottiePlayerStore.get(elementRef);
     if (stored?.animation) {
         stored.animation.stop();
+        return true;
+    }
+    return false;
+}
+
+export function setSpeed(elementRef, speed) {
+    const stored = blazorLottiePlayerStore.get(elementRef);
+    if (stored?.animation && speed) {
+        stored.animation.setSpeed(speed);
+        return true;
+    }
+    return false;
+}
+
+export function setDirection(elementRef, direction) {
+    const stored = blazorLottiePlayerStore.get(elementRef);
+    if (stored?.animation && direction) {
+        stored.animation.setDirection(direction);
         return true;
     }
     return false;
