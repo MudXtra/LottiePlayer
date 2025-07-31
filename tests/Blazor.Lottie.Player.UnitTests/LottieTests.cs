@@ -1,7 +1,8 @@
 using System.Reflection;
 using AwesomeAssertions;
 using Bunit;
-using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
+using Moq;
 
 namespace Blazor.Lottie.Player.UnitTests
 {
@@ -16,12 +17,13 @@ namespace Blazor.Lottie.Player.UnitTests
             base.Setup();
 
             // Setup the import call to return a mock module
-            var moduleMock = Context.JSInterop.SetupModule("./content/Blazor.Lottie.Player/loadLottieWeb.js");
+            var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/loadLottieWeb.js");
             // Setup the initialize call to return true
-            moduleMock.Setup<bool>("initialize", _ => true);
+            moduleMock.Setup<bool>("initialize", _ => true).SetResult(true);
 
-            var lottieModuleMock = Context.JSInterop.SetupModule("./content/Blazor.Lottie.Player/lottiePlayerModule.js");
-            lottieModuleMock.Setup<bool>("initialize", _ => true).SetResult(true);
+            var lottieModuleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
+            var animationModuleMock = new Mock<IJSObjectReference>();
+            lottieModuleMock.SetupVoid("initialize");
 
             lottieModuleMock.Setup<bool>("play", _ => true).SetResult(true);
             lottieModuleMock.Setup<bool>("pause", _ => true).SetResult(true);
@@ -32,7 +34,7 @@ namespace Blazor.Lottie.Player.UnitTests
         }
 
         [Test]
-        public void LottieComponentRendersCorrectly()
+        public async Task LottieComponentRendersCorrectly()
         {
             // Arrange
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
@@ -43,11 +45,6 @@ namespace Blazor.Lottie.Player.UnitTests
             // Act
             var element = comp.Find($"#{comp.Instance.ElementId}");
             element.Should().NotBeNull();
-
-            var prop = typeof(LottiePlayer).GetProperty("ElementRef", BindingFlags.NonPublic | BindingFlags.Instance);
-            prop.Should().NotBeNull();
-            var elementRef = (ElementReference)prop.GetValue(comp.Instance)!;
-            elementRef.ShouldBeElementReferenceTo(element);
 
             // Assert Defaults
             comp.Instance.AutoPlay.Should().BeTrue();
@@ -62,6 +59,18 @@ namespace Blazor.Lottie.Player.UnitTests
             options.AnimationQuality.Should().Be(LottieAnimationQuality.High);
             options.SmoothFrameInterpolation.Should().BeTrue();
 
+            // get and invoke private void HandleAnimationReady(object? sender, LottiePlayerLoadedEventArgs args)
+            var method = typeof(LottiePlayer).GetMethod("HandleAnimationReady", BindingFlags.NonPublic | BindingFlags.Instance);
+            method.Should().NotBeNull();
+            // Invoke the method with a mock LottiePlayerLoadedEventArgs
+            var args = new LottiePlayerLoadedEventArgs
+            {
+                ElementId = comp.Instance.ElementId,
+                CurrentFrame = 0.0,
+                TotalFrames = 100.0,
+            };
+            await comp.InvokeAsync(() => method.Invoke(comp.Instance, [this, args]));
+
             comp.Instance.IsAnimationLoaded.Should().BeTrue();
             comp.Instance.IsAnimationPaused.Should().Be(!comp.Instance.AutoPlay);
             comp.Instance.CurrentAnimationFrame.Should().Be(0.0);
@@ -72,12 +81,28 @@ namespace Blazor.Lottie.Player.UnitTests
         {
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
                 .Add(p => p.Src, "https://example.com/lottie.json")
-                .Add(p => p.UserAttributes, new Dictionary<string, object> { { "data-test", "abc" }, { "aria-label", "lottie" } })
             );
             var element = comp.Find($"#{comp.Instance.ElementId}");
+
+            // Check default attributes
+            element.HasAttribute("data-test").Should().BeFalse();
+            element.GetAttribute("role").Should().Be("animation");
+            element.GetAttribute("aria-label").Should().Be("Lottie Animation");
+
+            comp.SetParametersAndRender(parameters => parameters
+                .Add(p => p.UserAttributes, new Dictionary<string, object>
+                {
+                    { "data-test", "abc" },
+                    { "aria-label", "lottie" }
+                })
+            );
+
+            element = comp.Find($"#{comp.Instance.ElementId}");
+
             element.HasAttribute("data-test").Should().BeTrue();
             element.GetAttribute("data-test").Should().Be("abc");
             element.GetAttribute("aria-label").Should().Be("lottie");
+            element.GetAttribute("role").Should().Be("animation");
         }
 
         [Test]
@@ -100,20 +125,21 @@ namespace Blazor.Lottie.Player.UnitTests
                 .Add(p => p.Src, "https://example.com/lottie.json")
             );
             // Simulate module disposal
-            comp.Instance.GetType().GetField("_lottiePlayerModule", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(comp.Instance, null);
+            comp.Instance.LottiePlayerModule.Should().NotBeNull();
+            comp.InvokeAsync(() => comp.Instance.DisposeAsync().GetAwaiter().GetResult());
+            comp.Instance.LottiePlayerModule.Should().BeNull();
 
-            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.PlayAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.PauseAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.StopAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.SetSpeedAsync(1.0));
-            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.PlayAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.PauseAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.StopAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.SetSpeedAsync(1.0));
+            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward));
         }
 
         [Test]
         public void LottiePlayer_ThrowsIfJsModuleFailsToLoad()
         {
-            var moduleMock = Context.JSInterop.SetupModule("./content/Blazor.Lottie.Player/loadLottieWeb.js");
+            var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/loadLottieWeb.js");
             moduleMock.Setup<bool>("initialize", _ => false);
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -170,8 +196,10 @@ namespace Blazor.Lottie.Player.UnitTests
             initCount = (int)field.GetValue(comp.Instance)!;
             initCount.Should().Be(3);
 
-            var options = new LottieAnimationOptions();
-            options.AnimationQuality = LottieAnimationQuality.Medium;
+            var options = new LottieAnimationOptions
+            {
+                AnimationQuality = LottieAnimationQuality.Medium
+            };
             comp.Instance.AnimationOptions.Should().NotBe(options.AnimationQuality);
 
             // Change a options class should reinitialize
@@ -199,15 +227,13 @@ namespace Blazor.Lottie.Player.UnitTests
             await comp.InvokeAsync(async () => await comp.Instance.PlayAnimationAsync());
             comp.Instance.IsAnimationPaused.Should().BeFalse();
 
-            var result = await comp.InvokeAsync<bool>(async () => await comp.Instance.SetSpeedAsync(2.0));
-            result.Should().BeTrue();
-            result = false;
+            await comp.InvokeAsync(async () => await comp.Instance.SetSpeedAsync(2.0));
 
-            result = await comp.InvokeAsync<bool>(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Reverse));
-            result.Should().BeTrue();
+            await comp.InvokeAsync(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Reverse));
 
             await comp.InvokeAsync(async () => await comp.Instance.StopAnimationAsync());
-            comp.Instance.IsAnimationPaused.Should().BeTrue();
+            comp.Instance.IsAnimationPaused.Should().BeFalse();
+            comp.Instance.IsAnimationStopped.Should().BeTrue();
         }
 
         [Test]
@@ -229,15 +255,15 @@ namespace Blazor.Lottie.Player.UnitTests
             );
             // invoke the methods that invoke the events
             var domloadedMethod = typeof(LottiePlayer).GetMethod("HandleDOMLoaded", BindingFlags.NonPublic | BindingFlags.Instance);
-            domloadedMethod!.Invoke(comp.Instance, new object[] { this, new LottiePlayerLoadedEventArgs() });
+            comp.InvokeAsync(() => domloadedMethod!.Invoke(comp.Instance, [this, new LottiePlayerLoadedEventArgs()]));
             var animationReadyMethod = typeof(LottiePlayer).GetMethod("HandleAnimationReady", BindingFlags.NonPublic | BindingFlags.Instance);
-            animationReadyMethod!.Invoke(comp.Instance, new object[] { this, new LottiePlayerLoadedEventArgs() });
+            comp.InvokeAsync(() => animationReadyMethod!.Invoke(comp.Instance, [this, new LottiePlayerLoadedEventArgs()]));
             var animationCompletedMethod = typeof(LottiePlayer).GetMethod("HandleAnimationCompleted", BindingFlags.NonPublic | BindingFlags.Instance);
-            animationCompletedMethod!.Invoke(comp.Instance, new object[] { this, true });
+            comp.InvokeAsync(() => animationCompletedMethod!.Invoke(comp.Instance, [this, true]));
             var loopCompleteMethod = typeof(LottiePlayer).GetMethod("HandleAnimationLoopCompleted", BindingFlags.NonPublic | BindingFlags.Instance);
-            loopCompleteMethod!.Invoke(comp.Instance, new object[] { this, true });
+            comp.InvokeAsync(() => loopCompleteMethod!.Invoke(comp.Instance, [this, true]));
             var currentFrameChangedMethod = typeof(LottiePlayer).GetMethod("HandleCurrentFrameChanged", BindingFlags.NonPublic | BindingFlags.Instance);
-            currentFrameChangedMethod!.Invoke(comp.Instance, new object[] { this, 17.0 });
+            comp.InvokeAsync(() => currentFrameChangedMethod!.Invoke(comp.Instance, [this, new LottiePlayerEventFrameArgs()]));
 
             // Check event invocations
             handledom.Should().BeTrue();
@@ -248,7 +274,7 @@ namespace Blazor.Lottie.Player.UnitTests
         }
 
 #pragma warning disable CS8619
-        public static IEnumerable<object[]> CurrentFrameChangeFuncCases()
+        private static IEnumerable<object[]> CurrentFrameChangeFuncCases()
         {
             yield return new object[] { (Func<double, bool>)(frame => frame % 10 == 0), 10 };
             yield return new object?[] { null, 5 };
@@ -264,7 +290,7 @@ namespace Blazor.Lottie.Player.UnitTests
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
                 .Add(p => p.Src, "https://assets2.lottiefiles.com/packages/lf20_8j3q1k.json")
                 .Add(p => p.CurrentFrameChangeFunc, currentFrameChangeFunc)
-                .Add(p => p.CurrentFrameChanged, (Action<double>)(frame =>
+                .Add(p => p.CurrentFrameChanged, (Action<LottiePlayerEventFrameArgs>)(args =>
                 {
                     frameChangedCount++;
                 }))
@@ -289,11 +315,11 @@ namespace Blazor.Lottie.Player.UnitTests
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
                 .Add(p => p.Src, "https://example.com/lottie.json")
                 .Add(p => p.CurrentFrameChangeFunc, (Func<double, bool>)(_ => false))
-                .Add(p => p.CurrentFrameChanged, (Action<double>)(_ => eventInvoked = true))
+                .Add(p => p.CurrentFrameChanged, (Action<LottiePlayerEventFrameArgs>)(_ => eventInvoked = true))
             );
             // Use reflection to invoke the private handler
             var method = typeof(LottiePlayer).GetMethod("HandleCurrentFrameChanged", BindingFlags.NonPublic | BindingFlags.Instance);
-            method!.Invoke(comp.Instance, new object[] { null, 42.0 });
+            method!.Invoke(comp.Instance, [null, new LottiePlayerEventFrameArgs { CurrentTime = 42.0 }]);
             eventInvoked.Should().BeFalse();
         }
 

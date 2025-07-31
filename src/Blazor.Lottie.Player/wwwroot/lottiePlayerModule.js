@@ -1,10 +1,5 @@
-// Use a WeakMap for automatic cleanup when elements are garbage collected
-const blazorLottiePlayerStore = new WeakMap();
 
 export function initialize(dotNetRef, elementRef, options) {
-    console.log(dotNetRef);
-    console.log(elementRef);
-    console.log(options);
     const animation = lottie.loadAnimation({
         container: elementRef,
         renderer: options.renderer,
@@ -12,93 +7,73 @@ export function initialize(dotNetRef, elementRef, options) {
         autoplay: false,
         path: options.path
     });
-    console.log(animation);
     let success = animation !== null && animation !== undefined;
-    console.log(success);
     if (!success) {
         console.error("Failed to load Lottie animation. Check the path and options.");
-        return false;
+        return null;
     }
-
-    // Store using elementRef as key - automatic cleanup when element is removed
-    blazorLottiePlayerStore.set(elementRef, {
-        animation: animation,
-        dotNetRef: dotNetRef,
-        options: options,
-    });
-
-    console.log(blazorLottiePlayerStore);
 
     // Set up options
-    success = setOptions(elementRef);
-    console.log(`setOptions: ${success}`)
+    success = setOptions(animation, options);
     if (!success) {
         console.error("Failed to set options for Lottie animation.");
-        return false;
+        return null;
     }
     // Set up event listeners
-    success = addEvents(elementRef);
-    console.log(`addEvents: ${success}`);
+    success = addEvents(animation, dotNetRef, options, elementRef);
     if (!success) {
         console.error("Failed to add event listeners for Lottie animation.");
-        return false;
+        return null;
     }
     // start playing the animation if autoplay is true
-    if (options.autoplay) {
+    if (options.autoPlay) {
         // If autoplay is true, play the animation immediately
         animation.play();
-        console.log("play");
     }
-    return true; // Return success status
+    return animation; // Return animation if successful
 }
 
-function setOptions(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation && stored?.options) {
+function setOptions(animation, options) {
+    if (animation && options) {
         // Apply various options
-        const options = stored.options;
-        if (options.speed !== undefined && options.speed !== 1.0) stored.animation.setSpeed(options.speed);
-        if (options.direction !== undefined && options.direction !== 1) stored.animation.setDirection(options.direction);
-        if (options.setSubFrame !== true) stored.animation.setSubframe(false);
+        if (options.speed !== undefined && options.speed !== 1.0) animation.setSpeed(options.speed);
+        if (options.direction !== undefined && options.direction !== 1) animation.setDirection(options.direction);
+        if (options.setSubFrame !== true) animation.setSubframe(false);
         if (options.quality !== undefined && options.quality !== 'high') lottie.setQuality(options.quality);
         return true;
     }
     return false;
 }
 
-function addEvents(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation && stored?.dotNetRef && stored?.options) {
-        const animation = stored.animation;
-        const dotNetAdapter = stored.dotNetRef;
-        const options = stored.options;
-
-        // Add event listeners
-        animation.addEventListener('dataready', () => {
+function addEvents(animation, dotNetAdapter, options, elementRef) {
+    if (animation && dotNetAdapter && options && elementRef) {
+        animation.addEventListener('data_ready', () => {
+            // Add event listeners
             const eventArgs = {
                 elementId: elementRef.id,
                 currentFrame: animation.currentFrame,
                 totalFrames: animation.totalFrames
             };
-            invokeDotNetMethodAsync(dotNetAdapter, "AnimationReadyEventAsync", eventArgs);
+            invokeDotNetMethodAsync(dotNetAdapter, "AnimationReadyEvent", eventArgs);
         });
         animation.addEventListener('DOMLoaded', () => {
+            // Add event listeners
             const eventArgs = {
                 elementId: elementRef.id,
                 currentFrame: animation.currentFrame,
                 totalFrames: animation.totalFrames
             };
-            invokeDotNetMethodAsync(dotNetAdapter, "DOMLoadedEventAsync", eventArgs);
+            invokeDotNetMethodAsync(dotNetAdapter, "DOMLoadedEvent", eventArgs);
         });
         animation.addEventListener('complete', () => {
-            invokeDotNetMethodAsync(dotNetAdapter, 'CompleteEventAsync');
+            invokeDotNetMethodAsync(dotNetAdapter, 'CompleteEvent');
         });
         animation.addEventListener('loopComplete', () => {
-            invokeDotNetMethodAsync(dotNetAdapter, 'LoopCompleteEventAsync');
+            invokeDotNetMethodAsync(dotNetAdapter, 'LoopCompleteEvent');
         });
         if (options.enterFrameEvent) {
             animation.addEventListener('enterFrame', (e) => {
-                invokeDotNetMethodAsync(dotNetAdapter, 'EnterFrameEventAsync', e);
+                invokeDotNetMethodAsync(dotNetAdapter, 'EnterFrameEvent', e);
             });
         }
         return true;
@@ -113,57 +88,74 @@ function invokeDotNetMethodAsync(dotNetAdapter, methodName, ...args) {
         });
 }
 
-export function play(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation) {
-        stored.animation.play();
-        return true;
+export function play(animation) {
+    if (animation) {
+        animation.play();
+    } else {
+        console.error("Animation instance is null or undefined.");
     }
-    return false;
 }
 
-export function pause(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation) {
-        stored.animation.pause();
-        return true;
+export function stop(animation) {
+    if (animation) {
+        animation.stop();
+    } else {
+        console.error("Animation instance is null or undefined.");
     }
-    return false;
 }
 
-export function stop(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation) {
-        stored.animation.stop();
-        return true;
+export function pause(animation) {
+    if (animation) {
+        animation.pause();
+    } else {
+        console.error("Animation instance is null or undefined.");
     }
-    return false;
 }
 
-export function setSpeed(elementRef, speed) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation && speed) {
-        stored.animation.setSpeed(speed);
-        return true;
+export function goToAndStop(animation, frame, isFrame) {
+    if (animation) {
+        if (isFrame) {
+            animation.goToAndStop(frame, true);
+        } else {
+            animation.goToAndStop(animation.totalFrames * frame, true);
+        }
+    } else {
+        console.error("Animation instance is null or undefined.");
     }
-    return false;
 }
 
-export function setDirection(elementRef, direction) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation && direction) {
-        stored.animation.setDirection(direction);
-        return true;
+export function goToAndPlay(animation, frame, isFrame) {
+    if (animation) {
+        if (isFrame) {
+            animation.goToAndPlay(frame, true);
+        } else {
+            animation.goToAndPlay(animation.totalFrames * frame, true);
+        }
+    } else {
+        console.error("Animation instance is null or undefined.");
     }
-    return false;
 }
 
-export function destroy(elementRef) {
-    const stored = blazorLottiePlayerStore.get(elementRef);
-    if (stored?.animation) {
-        stored.animation.destroy();
-        blazorLottiePlayerStore.delete(elementRef);
-        return true;
+export function setDirection(animation, direction) {
+    if (animation && (direction === 1 || direction === -1)) {
+        animation.setDirection(direction);
+    } else {
+        console.error("Invalid animation instance or direction value. Direction must be 1 or -1.");
     }
-    return false;
+}
+
+export function setSpeed(animation, speed) {
+    if (animation && speed > 0) {
+        animation.setSpeed(speed);
+    } else {
+        console.error("Invalid animation instance or speed value. Speed must be greater than 0.");
+    }
+}
+
+export function destroy(animation) {
+    if (animation) {
+        animation.destroy();
+    } else {
+        console.error("Animation instance is null or undefined.");
+    }
 }

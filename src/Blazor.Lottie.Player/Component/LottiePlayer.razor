@@ -1,4 +1,9 @@
 @namespace Blazor.Lottie.Player
 @inherits ComponentBase
 
-<div @ref="ElementRef" id="@ElementId" class="@Classname" style="@Stylename" @attributes="@UserAttributes"></div>
+<div @ref="@ElementRef" id="@ElementId" class="@Classname" style="@Stylename" @attributes="@MergedUserAttributes">
+    @if (_failMessage != null)
+    {
+        <span style="color: red;">@_failMessage</span>
+    }
+</div>

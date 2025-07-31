@@ -6,6 +6,15 @@ namespace Blazor.Lottie.Player;
 public class LottiePlaybackOptions
 {
     /// <summary>
+    /// The source or path to the lottie animation JSON file.
+    /// </summary>
+    /// <remarks>
+    /// This can be a URL or a local path relative to the web root. <br/>e.g. "./_content/Blazor.Lottie.Player/loading.json"
+    /// <br/>or "https://example.com/path/to/animation.json". <br/>
+    /// </remarks>
+    public string Path { get; set; } = "./_content/Blazor.Lottie.Player/loading.json";
+
+    /// <summary>
     /// Gets or sets whether the animation should start playing automatically.
     /// </summary>
     /// <remarks>Default is true.</remarks>

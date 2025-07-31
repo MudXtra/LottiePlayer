@@ -1,4 +1,5 @@
 @page "/"
+@inject ISnackbar Snackbar
 
 <PageTitle>Blazor Lottie Player Documentation</PageTitle>
 
@@ -13,60 +14,155 @@
 
 <p>To get started, you can check out</p>
 
-<a href="https://github.com/MudXtra">Copyright @@ 2025 MudXtra</a>.
-<br/><br/>
-<b>Blazor Lottie Player</b>
-<LottiePlayer @ref="@_lottiePlayer" Src="https://lottie.host/c73eae41-b2be-42bb-9718-89adb9f82c9f/XK4evGprVz.lottie" />
-<br/>
-<table>
-    <tbody>
-        <tr>
-            <td>
-                <b>Lottie Reference:</b>
-            </td>
-            <td>
-                @(_lottiePlayer != null ? "Yes" : "Null")
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <b>IsAnimationLoaded:</b>
-            </td>
-            <td>
-                @_lottiePlayer?.IsAnimationLoaded
-            </td>
-        </tr>
-        <tr>
-            <td>
-                <b>IsAnimationPaused:</b>
-            </td>
-            <td>
-                @_lottiePlayer?.IsAnimationPaused
-            </td>
-        </tr>
-    </tbody>
-</table>
- <br/>
-<table>
-    <tbody>
-        <tr>
-            <td>
-                <button @onclick="@(() => _lottiePlayer!.PlayAnimationAsync())">Play</button>
-            </td>
-            <td>
-                <button @onclick="@(() => _lottiePlayer!.PauseAnimationAsync())">Pause</button>
-            </td>
-            <td>
-                <button @onclick="@(() => _lottiePlayer!.StopAnimationAsync())">Stop</button>
-            </td>
-        </tr>
-    </tbody>
-</table>
-<br/>
-<b>No frills Lottie WC</b>
-<script src="https://unpkg.com/@@lottiefiles/dotlottie-wc@0.6.2/dist/dotlottie-wc.js" type="module"></script>
-<dotlottie-wc src="https://lottie.host/c73eae41-b2be-42bb-9718-89adb9f82c9f/XK4evGprVz.lottie" style="width: 300px;height: 300px" speed="1" autoplay loop></dotlottie-wc>
+<a href="https://github.com/MudXtra">Copyright @@ 2025 MudXtra </a>
+
+<!-- Example 1: Basic Lottie Player with Play/Pause/Stop using MudBlazor Buttons -->
+<MudPaper Class="pa-4 mb-6">
+    <MudText Typo="Typo.h6">Example 1: Basic Controls</MudText>
+    <div style="width:300px;">
+        <LottiePlayer @ref="@_lottiePlayer1" Src="@_lottieList[0].Src" />
+    </div>
+    <MudStack Row="true" Spacing="2" Class="mt-2">
+        <MudButton Variant="Variant.Filled" OnClick="@(async () => await _lottiePlayer1!.PlayAnimationAsync())">Play</MudButton>
+        <MudButton Variant="Variant.Filled" OnClick="@(async () => await _lottiePlayer1!.PauseAnimationAsync())">Pause</MudButton>
+        <MudButton Variant="Variant.Filled" OnClick="@(async () => await _lottiePlayer1!.StopAnimationAsync())">Stop</MudButton>
+    </MudStack>
+</MudPaper>
+
+<!-- Example 2: Autoplay, Loop, and Speed Control -->
+<MudPaper Class="pa-4 mb-6">
+    <MudText Typo="Typo.h6">Example 2: Autoplay, Loop, and Speed</MudText>
+    <div style="width:300px;">
+        <LottiePlayer @ref="@_lottiePlayer2"
+                      Src="@_lottieList[1].Src"
+                      Autoplay="@_autoplay2"
+                      Loop="@_loop2"
+                      AnimationSpeed="@_speed2" />
+    </div>
+    <MudStack Row="true" Spacing="2" Class="mt-2">
+        <MudSwitch @bind-Value="_autoplay2" Color="Color.Primary" Label="Autoplay" />
+        <MudSwitch @bind-Value="_loop2" Color="Color.Secondary" Label="Loop" />
+        <MudSlider @bind-Value="_speed2" @bind-Value:after="@(async () => await _lottiePlayer2!.SetSpeedAsync(_speed2))" Min="0.1" Max="3" Step="0.1" Style="width:150px;" />
+        <MudText Typo="Typo.body2">Speed: @_speed2.ToString("0.0")x</MudText>
+    </MudStack>
+</MudPaper>
+
+<!-- Example 3: Direction Control and Alternate Animation -->
+<MudPaper Class="pa-4 mb-6">
+    <MudText Typo="Typo.h6">Example 3: Direction Control</MudText>
+    <div style="width:300px;">
+        <LottiePlayer @ref="@_lottiePlayer3"
+                      Src="@_lottieList[2].Src"
+                      AnimationDirection="@((LottieAnimationDirection)_direction3)" />
+    </div>
+    <MudStack Row="true" Spacing="2" Class="mt-2">
+        <MudSelect @bind-Value="_direction3" Label="Direction" FullWidth="false" RelativeWidth="@DropdownWidth.Relative">
+            <MudSelectItem Value="1">Forward</MudSelectItem>
+            <MudSelectItem Value="-1">Reverse</MudSelectItem>
+        </MudSelect>
+        <MudText>Frame: @_lottiePlayer3?.CurrentAnimationFrame</MudText>
+        <MudButton Variant="Variant.Filled" OnClick="@(async () => await _lottiePlayer3!.SetDirectionAsync((LottieAnimationDirection)_direction3))">Set Direction</MudButton>
+    </MudStack>
+</MudPaper>
+
+<!-- Example 4: Responsive Sizing and Custom Controls -->
+<MudPaper Class="pa-4 mb-6">
+    <MudText Typo="Typo.h6">Example 4: Responsive Sizing</MudText>
+    <div style="width:@_size4px;">
+        <LottiePlayer @ref="@_lottiePlayer4"
+                      Src="@_lottieList[3].Src" />
+    </div>
+    <MudSlider @bind-Value="_size4" Min="100" Max="500" Step="10" Style="width:200px;" />
+    <MudText Typo="Typo.body2">Size: @_size4 px</MudText>
+</MudPaper>
+
+<!-- Example 5: Disabled/Read-Only State -->
+<MudPaper Class="pa-4 mb-6">
+    <MudText Typo="Typo.h6">Example 5: Disabled State</MudText>
+    <div style="width:300px;">
+        <LottiePlayer Src="@_lottieAnim.Src"
+                      Autoplay="true"
+                      Loop="true" />
+    </div>
+    <MudStack Row="true" Spacing="4" Class="mt-2" AlignItems="AlignItems.End" Justify="Justify.SpaceAround">
+        <MudSelect @bind-Value="@_lottieAnim" Label="Select Animation" FullWidth="false" Style="min-width: 300px;" RelativeWidth="@DropdownWidth.Adaptive">
+            @foreach (var lottie in _lottieList.OrderBy(x => x.Name))
+            {
+                <MudSelectItem Value="@lottie">@lottie.Name</MudSelectItem>
+            }
+        </MudSelect>
+        <MudTextField FullWidth="false" Style="max-width: 200px;" @bind-Value="@_lottieName" />
+        <MudTextField FullWidth="true" Style="max-width: 500px;" @bind-Value="@_lottieSrc" />
+        <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.AddCircleOutline" OnClick="@AddLottie">Add</MudButton>
+        </MudStack>
+</MudPaper>
 
 @code {
+    private List<LottieAnimationList> _lottieList = [];
+
+    // Example 1
+    LottiePlayer? _lottiePlayer1;
+    int _lottie1Sel = 1;
+
+    // Example 2
+    LottiePlayer? _lottiePlayer2;
+    bool _autoplay2 = true;
+    bool _loop2 = true;
+    double _speed2 = 1.0;
+    int _lottie2Sel = 2;
+
+    // Example 3
+    LottiePlayer? _lottiePlayer3;
+    int _direction3 = 1;
+    int _lottie3Sel = 3;
+
+    // Example 4
+    LottiePlayer? _lottiePlayer4;
+    int _size4 = 300;
+    string _size4px => $"{_size4}px";
+    string _lottieName = string.Empty;
+    string _lottieSrc = string.Empty;
+    LottieAnimationList _lottieAnim = default!;
+
+    // Legacy example
     LottiePlayer? _lottiePlayer;
+    int _lottie5Sel = 0;
+
+    protected override void OnInitialized()
+    {
+        _lottieList.Add(new LottieAnimationList() { Name = "Hand Loading", Src = "https://lottie.host/99ab6923-62d6-4030-aeb0-282d33242f3e/Z1CzIUWU18.json" });
+        _lottieList.Add(new LottieAnimationList() { Name = "Gift Box", Src = "./lottie/newAnimation.json" });
+        _lottieList.Add(new LottieAnimationList() { Name = "Lego Loading", Src = "https://lottie.host/694149cc-b526-4803-acff-522c384f3319/UM1M0cO0TD.json" });
+        _lottieList.Add(new LottieAnimationList() { Name = "Handshake", Src = "https://lottie.host/382bbcd7-e7b1-4a30-90cd-884a9c7c3bb1/F7I9nPKEr1.json" });
+        _lottieList.Add(new LottieAnimationList() { Name = "HotDog Loading", Src = "./lottie/BunBun.json" });
+        _lottieList.Add(new LottieAnimationList() { Name = "Hand Loading JSON", Src = "./lottie/loading.json" });
+        _lottieAnim = _lottieList[4];
+    }
+
+    private void AddLottie(MouseEventArgs args)
+    {
+        if (!string.IsNullOrWhiteSpace(_lottieName) && !string.IsNullOrWhiteSpace(_lottieSrc))
+        {
+            _lottieList.Add(new LottieAnimationList() { Name = _lottieName, Src = _lottieSrc });
+            _lottieName = string.Empty;
+            _lottieSrc = string.Empty;
+            Snackbar.Add("Lottie animation added successfully!", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Please provide both name and source URL for the Lottie animation.", Severity.Error);
+        }
+    }
+}
+
+@code {
+    public class LottieAnimationList
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Src { get; set; } = string.Empty;
+        public override string ToString()
+        {
+            return $"{Name}";
+        }
+    }
 }

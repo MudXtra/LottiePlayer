@@ -18,15 +18,44 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// Represents the unique identifier for a Lottie element's surrounding div.
     /// </summary>
     public readonly string ElementId = Identifier.Create("lottie-");
-    internal LottiePlayerModule? _lottiePlayerModule;
+    private string? _failMessage = null;
+    /// <summary>
+    /// The module used to control Lottie Player functionality.
+    /// </summary>
+    public LottiePlayerModule? LottiePlayerModule { get; private set; }
     private int _initCount = 0;
 
     /// <summary>
     /// The class list for the surrounding div, which includes the base class and the Blazor Lottie Player class.
     /// </summary>
-    protected string Classname => $"blazor-lottie-player {Class}";
+    protected string Classname
+        => string.IsNullOrWhiteSpace(Class)
+            ? "blazor-lottie-player"
+            : $"blazor-lottie-player {Class}";
 
-    private string? Stylename => $"width: {Width}; height: {Height}; {Style}";
+    /// <summary>
+    /// The style string for the surrounding div, which includes the base style and any user-defined styles.
+    /// </summary>
+    protected string? Stylename
+        => string.IsNullOrWhiteSpace(Style) ? null : Style;
+
+
+    /// <summary>
+    /// Returns the merged user attributes with sensible defaults, allowing user overrides.
+    /// </summary>
+    protected IReadOnlyDictionary<string, object?> MergedUserAttributes
+    {
+        get
+        {
+            var dict = UserAttributes != null
+                ? new Dictionary<string, object?>(UserAttributes)
+                : new Dictionary<string, object?>();
+
+            dict.TryAdd("aria-label", "Lottie Animation");
+            dict.TryAdd("role", "animation");
+            return dict;
+        }
+    }
 
     #endregion
 
@@ -52,20 +81,6 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     public string? Style { get; set; }
 
     /// <summary>
-    /// The width of the component. The value can be specified in any valid CSS unit, such as "px", "em",
-    /// or "%".
-    /// </summary>
-    [Parameter]
-    public string Width { get; set; } = "300px";
-
-    /// <summary>
-    /// The height of the component. The value can be specified in any valid CSS unit, such as "px", "em",
-    /// or "%".
-    /// </summary>
-    [Parameter]
-    public string Height { get; set; } = "300px";
-
-    /// <summary>
     /// Sets a collection of user-defined HTML attributes represented as key-value pairs.
     /// </summary>
     /// <remarks>
@@ -73,8 +88,8 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// rendering such as ARIA accessibility tags, data attributes, or any other custom
     /// HTML attributes that you want to apply to the component.
     /// </remarks>
-    [Parameter]
-    public Dictionary<string, object>? UserAttributes { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object?>? UserAttributes { get; set; }
 
     /// <summary>
     /// Gets or sets the source or relative URL for the component's content.
@@ -122,7 +137,8 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// Gets or sets the direction in which the Lottie animation plays.
     /// </summary>
     /// <remarks>
-    /// Defaults to <see cref="LottieAnimationDirection.Forward"/>.
+    /// Defaults to <see cref="LottieAnimationDirection.Forward"/>.<br/>
+    /// Changing this property after initialization will not change the playback direction of the animation, use <see cref="SetDirectionAsync(LottieAnimationDirection)"/>
     /// </remarks>
     [Parameter]
     public LottieAnimationDirection AnimationDirection { get; set; } = LottieAnimationDirection.Forward;
@@ -130,6 +146,10 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <summary>
     /// Gets or sets the speed of the animation.
     /// </summary>
+    /// <remarks>
+    /// Defaults to 1.0 (normal speed).<br/>
+    /// Changing this property after initialization will not change the speed of the animation, use <see cref="SetSpeedAsync(double)"/>   
+    /// </remarks>
     [Parameter]
     public double AnimationSpeed { get; set; } = 1.0;
 
@@ -140,7 +160,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// The function receives the current frame number and should return true if the event should be raised.
     /// This allows for custom throttling logic (e.g., only every 10th frame, only on specific frames, etc.)
     /// <br/>Warning: Frame updates could happen as frequently as 30-60 times per second.
-    /// <br/>Defaults to <c>null</c>. Set to <c>null</c> <see cref="CurrentFrameChanged"/> will not be raised.
+    /// <br/>Defaults to <c>null</c>. <see cref="CurrentFrameChanged"/> is only raised if something is attached to the handler.
     /// <br/>Example: <c>frame => frame % 10 == 0</c> will raise the event every 10th frame.
     /// </remarks>
     [Parameter] public Func<double, bool>? CurrentFrameChangeFunc { get; set; }
@@ -148,7 +168,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <summary>
     /// Called when the current frame changes (only when <see cref="CurrentFrameChangeFunc"/> returns true)
     /// </summary>
-    [Parameter] public EventCallback<double> CurrentFrameChanged { get; set; }
+    [Parameter] public EventCallback<LottiePlayerEventFrameArgs> CurrentFrameChanged { get; set; }
 
     /// <summary>
     /// Called when the Lottie player is initialized and the DOM is ready.
@@ -200,6 +220,10 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     public bool IsAnimationPaused { get; private set; } = false;
 
+    /// <summary>
+    /// Gets a value indicating whether the animation is stopped.
+    /// </summary>
+    public bool IsAnimationStopped { get; private set; } = true;
     #endregion
 
     #region Public Methods
@@ -210,16 +234,23 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <remarks>Should not be called before OnAfterRenderAsync.</remarks>
     /// <returns><see langword="true"/> if the animation was successfully started; otherwise, <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException"></exception>
-    public async Task<bool> PlayAnimationAsync()
+    public async ValueTask PlayAnimationAsync()
     {
-        if (_lottiePlayerModule == null)
+        if (LottiePlayerModule == null)
         {
             throw new InvalidOperationException("Lottie Player Module failed.");
         }
 
-        var result = await _lottiePlayerModule.PlayAsync();
-        IsAnimationPaused = !result;
-        return result;
+        if (IsAnimationStopped)
+        {
+            // If the animation is stopped, we need to reset the frame to 0 before playing
+            CurrentAnimationFrame = 0.0;
+            await LottiePlayerModule.GoToAndPlay(CurrentAnimationFrame, true);
+            IsAnimationStopped = false;
+        }
+
+        IsAnimationPaused = false;
+        await LottiePlayerModule.PlayAsync();
     }
 
     /// <summary>
@@ -228,15 +259,20 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <remarks>Should not be called before OnAfterRenderAsync.</remarks>
     /// <returns><see langword="true"/> if the animation was successfully paused; otherwise, <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException"></exception>
-    public async Task<bool> PauseAnimationAsync()
+    public async ValueTask PauseAnimationAsync()
     {
-        if (_lottiePlayerModule == null)
+        if (LottiePlayerModule == null)
         {
             throw new InvalidOperationException("Lottie Player Module failed.");
         }
-
-        IsAnimationPaused = await _lottiePlayerModule.PauseAsync();
-        return IsAnimationPaused;
+        if (IsAnimationStopped)
+        {
+            CurrentAnimationFrame = 0.0;
+            await LottiePlayerModule.GoToAndStop(CurrentAnimationFrame, true);
+            IsAnimationStopped = false;
+        }
+        IsAnimationPaused = true;
+        await LottiePlayerModule.PauseAsync();
     }
 
     /// <summary>
@@ -246,14 +282,15 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// returns a boolean indicating whether the operation was successful.</remarks>
     /// <returns><see langword="true"/> if the animation was successfully stopped; otherwise, <see langword="false"/>.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the Lottie Player Module is not initialized.</exception>
-    public async Task<bool> StopAnimationAsync()
+    public ValueTask StopAnimationAsync()
     {
-        if (_lottiePlayerModule == null)
+        if (LottiePlayerModule == null)
         {
             throw new InvalidOperationException("Lottie Player Module failed.");
         }
-        IsAnimationPaused = await _lottiePlayerModule.StopAsync();
-        return IsAnimationPaused;
+        IsAnimationPaused = false;
+        IsAnimationStopped = true;
+        return LottiePlayerModule.StopAsync();
     }
 
     /// <summary>
@@ -261,14 +298,13 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     /// <param name="speed">The desired playback speed. Must be a positive value, where 1.0 represents normal speed.</param>
     /// <exception cref="InvalidOperationException">Thrown if the Lottie Player Module is not initialized.</exception>
-    public async Task<bool> SetSpeedAsync(double speed)
+    public ValueTask SetSpeedAsync(double speed)
     {
-        if (_lottiePlayerModule == null)
+        if (LottiePlayerModule == null)
         {
             throw new InvalidOperationException("Lottie Player Module failed.");
         }
-        var result = await _lottiePlayerModule.SetSpeedAsync(speed);
-        return result;
+        return LottiePlayerModule.SetSpeedAsync(speed);
     }
 
     /// <summary>
@@ -276,14 +312,13 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     /// <param name="direction">The desired playback direction of the animation. Must be a valid <see cref="LottieAnimationDirection"/> value.</param>
     /// <exception cref="InvalidOperationException">Thrown if the Lottie Player Module is not initialized.</exception>
-    public async Task<bool> SetDirectionAsync(LottieAnimationDirection direction)
+    public ValueTask SetDirectionAsync(LottieAnimationDirection direction)
     {
-        if (_lottiePlayerModule == null)
+        if (LottiePlayerModule == null)
         {
             throw new InvalidOperationException("Lottie Player Module failed.");
         }
-        var result = await _lottiePlayerModule.SetDirectionAsync(direction);
-        return result;
+        return LottiePlayerModule.SetDirectionAsync(direction);
     }
 
     #endregion
@@ -294,12 +329,14 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     {
         IsAnimationLoaded = true;
         DOMLoaded.InvokeAsync(args);
+        StateHasChanged();
     }
 
     private void HandleAnimationReady(object? sender, LottiePlayerLoadedEventArgs args)
     {
         IsAnimationLoaded = true;
         AnimationReady.InvokeAsync(args);
+        StateHasChanged();
     }
 
     private void HandleAnimationCompleted(object? sender, bool completed)
@@ -312,12 +349,12 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         AnimationLoopCompleted.InvokeAsync();
     }
 
-    private void HandleCurrentFrameChanged(object? sender, double frame)
+    private void HandleCurrentFrameChanged(object? sender, LottiePlayerEventFrameArgs args)
     {
-        CurrentAnimationFrame = frame;
-        if (CurrentFrameChangeFunc == null || CurrentFrameChangeFunc.Invoke(frame))
+        CurrentAnimationFrame = args.CurrentTime;
+        if (CurrentFrameChangeFunc == null || CurrentFrameChangeFunc.Invoke(args.CurrentTime))
         {
-            CurrentFrameChanged.InvokeAsync(frame);
+            CurrentFrameChanged.InvokeAsync(args);
         }
     }
 
@@ -331,29 +368,31 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     private async Task InitializeLottieModule()
     {
         // dispose the existing module if it exists
-        if (_lottiePlayerModule != null && _initCount > 0)
+        if (LottiePlayerModule != null && _initCount > 0)
         {
             // cancel event handlers to prevent memory leaks
             EventSubscription(false);
 
-            await _lottiePlayerModule.DisposeAsync();
-            _lottiePlayerModule = null;
+            await LottiePlayerModule.DisposeAsync();
+            LottiePlayerModule = null;
             IsAnimationLoaded = false;
             IsAnimationPaused = false;
         }
         // initialize the new module with the current parameters
-        _lottiePlayerModule = new LottiePlayerModule(JSRuntime, ElementRef);
+        LottiePlayerModule = new LottiePlayerModule(JSRuntime, ElementRef);
         var lottiePlaybackOptions = new LottiePlaybackOptions
         {
             AutoPlay = AutoPlay,
+            Path = Src,
             Renderer = AnimationType.ToDescription(),
             Loop = Loop ? (object)(LoopCount > 0 ? LoopCount : true) : false,
             Direction = (int)AnimationDirection,
             Speed = AnimationSpeed,
             SetSubFrame = AnimationOptions.SmoothFrameInterpolation,
-            Quality = AnimationOptions.AnimationQuality.ToDescription()
+            Quality = AnimationOptions.AnimationQuality.ToDescription(),
+            EnterFrameEvent = CurrentFrameChanged.HasDelegate,
         };
-        IsAnimationLoaded = await _lottiePlayerModule.InitializeAsync(lottiePlaybackOptions);
+        IsAnimationLoaded = await LottiePlayerModule.InitializeAsync(lottiePlaybackOptions);
         if (!IsAnimationLoaded)
         {
             throw new InvalidOperationException("Failed to initialize Lottie Animation");
@@ -370,22 +409,22 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
 
     private void EventSubscription(bool subscribe)
     {
-        if (_lottiePlayerModule == null) return;
+        if (LottiePlayerModule == null) return;
         if (subscribe)
         {
-            _lottiePlayerModule.OnDOMLoaded += HandleDOMLoaded;
-            _lottiePlayerModule.OnAnimationReady += HandleAnimationReady;
-            _lottiePlayerModule.OnComplete += HandleAnimationCompleted;
-            _lottiePlayerModule.OnLoopComplete += HandleAnimationLoopCompleted;
-            _lottiePlayerModule.OnEnterFrame += HandleCurrentFrameChanged;
+            LottiePlayerModule.OnDOMLoaded += HandleDOMLoaded;
+            LottiePlayerModule.OnAnimationReady += HandleAnimationReady;
+            LottiePlayerModule.OnComplete += HandleAnimationCompleted;
+            LottiePlayerModule.OnLoopComplete += HandleAnimationLoopCompleted;
+            LottiePlayerModule.OnEnterFrame += HandleCurrentFrameChanged;
         }
         else
         {
-            _lottiePlayerModule.OnDOMLoaded -= HandleDOMLoaded;
-            _lottiePlayerModule.OnAnimationReady -= HandleAnimationReady;
-            _lottiePlayerModule.OnComplete -= HandleAnimationCompleted;
-            _lottiePlayerModule.OnLoopComplete -= HandleAnimationLoopCompleted;
-            _lottiePlayerModule.OnEnterFrame -= HandleCurrentFrameChanged;
+            LottiePlayerModule.OnDOMLoaded -= HandleDOMLoaded;
+            LottiePlayerModule.OnAnimationReady -= HandleAnimationReady;
+            LottiePlayerModule.OnComplete -= HandleAnimationCompleted;
+            LottiePlayerModule.OnLoopComplete -= HandleAnimationLoopCompleted;
+            LottiePlayerModule.OnEnterFrame -= HandleCurrentFrameChanged;
         }
     }
 
@@ -421,20 +460,23 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         var oldAutoPlay = AutoPlay;
         var oldLoop = Loop;
         var oldLoopCount = LoopCount;
-        var oldSpeed = AnimationSpeed;
         var oldType = AnimationType;
-        var oldDirection = AnimationDirection;
         var oldOptions = AnimationOptions;
 
         // Apply the parameters to the component
         parameters.SetParameterProperties(this);
 
+        // check if Src returns is json
+        if (string.IsNullOrWhiteSpace(Src) || !Src.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            _failMessage = "Src must be a valid JSON file path ending with .json";
+
+        }
+
         // Check if any key parameters changed
         if (AutoPlay != oldAutoPlay ||
             Loop != oldLoop ||
-            AnimationSpeed != oldSpeed ||
             !Equals(AnimationType, oldType) ||
-            !Equals(AnimationDirection, oldDirection) ||
             !Equals(AnimationOptions, oldOptions) ||
             Src != oldSrc ||
             LoopCount != oldLoopCount)
@@ -455,13 +497,13 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <returns></returns>
     public async ValueTask DisposeAsync()
     {
-        if (_lottiePlayerModule != null)
+        if (LottiePlayerModule != null)
         {
             // cancel event handlers to prevent memory leaks
             EventSubscription(false);
 
-            await _lottiePlayerModule.DisposeAsync();
-            _lottiePlayerModule = null;
+            await LottiePlayerModule.DisposeAsync();
+            LottiePlayerModule = null;
         }
 
         GC.SuppressFinalize(this);
