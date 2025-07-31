@@ -44,7 +44,7 @@ public class LottiePlayerModule : IAsyncDisposable
     public async Task<bool> InitializeAsync(LottiePlaybackOptions lottiePlaybackOptions)
     {
         if (_isDisposing || _js is null) return false;
-        _module = await _js.InvokeAsync<IJSObjectReference>("import", "./content/Blazor.Lottie.Player/lottiePlayerModule.js");
+        _module = await _js.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
         var result = await _module.InvokeAsync<bool>("initialize", _dotNetReference, _elementRef, lottiePlaybackOptions);
         if (lottiePlaybackOptions.AutoPlay)
         {

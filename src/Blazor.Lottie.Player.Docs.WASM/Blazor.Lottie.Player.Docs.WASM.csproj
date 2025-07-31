@@ -11,4 +11,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="9.0.6" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Blazor.Lottie.Player\Blazor.Lottie.Player.csproj" />
+  </ItemGroup>
+
 </Project>

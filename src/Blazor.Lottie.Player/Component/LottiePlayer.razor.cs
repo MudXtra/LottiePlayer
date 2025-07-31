@@ -13,7 +13,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
 {
     #region Private Variables
 
-    private ElementReference ElementRef = default!;
+    private ElementReference ElementRef { get; set; } = default!;
     /// <summary>
     /// Represents the unique identifier for a Lottie element's surrounding div.
     /// </summary>
@@ -24,9 +24,9 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <summary>
     /// The class list for the surrounding div, which includes the base class and the Blazor Lottie Player class.
     /// </summary>
-    protected string Classname => $"{Class} blazor-lottie-player";
+    protected string Classname => $"blazor-lottie-player {Class}";
 
-    private string? Stylename => string.IsNullOrWhiteSpace(Style) ? null : Style;
+    private string? Stylename => $"width: {Width}; height: {Height}; {Style}";
 
     #endregion
 
@@ -50,6 +50,20 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     [Parameter]
     public string? Style { get; set; }
+
+    /// <summary>
+    /// The width of the component. The value can be specified in any valid CSS unit, such as "px", "em",
+    /// or "%".
+    /// </summary>
+    [Parameter]
+    public string Width { get; set; } = "300px";
+
+    /// <summary>
+    /// The height of the component. The value can be specified in any valid CSS unit, such as "px", "em",
+    /// or "%".
+    /// </summary>
+    [Parameter]
+    public string Height { get; set; } = "300px";
 
     /// <summary>
     /// Sets a collection of user-defined HTML attributes represented as key-value pairs.
@@ -279,13 +293,13 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     private void HandleDOMLoaded(object? sender, LottiePlayerLoadedEventArgs args)
     {
         IsAnimationLoaded = true;
-        await DOMLoaded.InvokeAsync(args);
+        DOMLoaded.InvokeAsync(args);
     }
 
-    private void HandleAnimationLoaded(object? sender, LottiePlayerLoadedEventArgs args)
+    private void HandleAnimationReady(object? sender, LottiePlayerLoadedEventArgs args)
     {
         IsAnimationLoaded = true;
-        await AnimationReady.InvokeAsync(args);
+        AnimationReady.InvokeAsync(args);
     }
 
     private void HandleAnimationCompleted(object? sender, bool completed)
@@ -303,7 +317,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         CurrentAnimationFrame = frame;
         if (CurrentFrameChangeFunc == null || CurrentFrameChangeFunc.Invoke(frame))
         {
-            await CurrentFrameChanged.InvokeAsync(frame);
+            CurrentFrameChanged.InvokeAsync(frame);
         }
     }
 
@@ -317,7 +331,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     private async Task InitializeLottieModule()
     {
         // dispose the existing module if it exists
-        if (_lottiePlayerModule != null)
+        if (_lottiePlayerModule != null && _initCount > 0)
         {
             // cancel event handlers to prevent memory leaks
             EventSubscription(false);
@@ -360,7 +374,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         if (subscribe)
         {
             _lottiePlayerModule.OnDOMLoaded += HandleDOMLoaded;
-            _lottiePlayerModule.OnAnimationReady += HandleAnimationLoaded;
+            _lottiePlayerModule.OnAnimationReady += HandleAnimationReady;
             _lottiePlayerModule.OnComplete += HandleAnimationCompleted;
             _lottiePlayerModule.OnLoopComplete += HandleAnimationLoopCompleted;
             _lottiePlayerModule.OnEnterFrame += HandleCurrentFrameChanged;
@@ -368,7 +382,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         else
         {
             _lottiePlayerModule.OnDOMLoaded -= HandleDOMLoaded;
-            _lottiePlayerModule.OnAnimationReady -= HandleAnimationLoaded;
+            _lottiePlayerModule.OnAnimationReady -= HandleAnimationReady;
             _lottiePlayerModule.OnComplete -= HandleAnimationCompleted;
             _lottiePlayerModule.OnLoopComplete -= HandleAnimationLoopCompleted;
             _lottiePlayerModule.OnEnterFrame -= HandleCurrentFrameChanged;
@@ -385,7 +399,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         if (firstRender)
         {
             // load the Lottie Web Player JS from CDN
-            var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./content/Blazor.Lottie.Player/loadLottieWeb.js");
+            var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
             var result = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs);
             if (!result)
             {
@@ -428,13 +442,12 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
             reInitialize = true;
         }
 
-        if (reInitialize)
+        if (reInitialize && _initCount > 0)
         {
             return InitializeLottieModule();
         }
-        return Task.CompletedTask;
+        return base.SetParametersAsync(parameters);
     }
-
 
     /// <summary>
     /// Disposes the LottiePlayer component asynchronously, cleaning up resources and references.

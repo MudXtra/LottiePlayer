@@ -14,3 +14,59 @@
 <p>To get started, you can check out</p>
 
 <a href="https://github.com/MudXtra">Copyright @@ 2025 MudXtra</a>.
+<br/><br/>
+<b>Blazor Lottie Player</b>
+<LottiePlayer @ref="@_lottiePlayer" Src="https://lottie.host/c73eae41-b2be-42bb-9718-89adb9f82c9f/XK4evGprVz.lottie" />
+<br/>
+<table>
+    <tbody>
+        <tr>
+            <td>
+                <b>Lottie Reference:</b>
+            </td>
+            <td>
+                @(_lottiePlayer != null ? "Yes" : "Null")
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <b>IsAnimationLoaded:</b>
+            </td>
+            <td>
+                @_lottiePlayer?.IsAnimationLoaded
+            </td>
+        </tr>
+        <tr>
+            <td>
+                <b>IsAnimationPaused:</b>
+            </td>
+            <td>
+                @_lottiePlayer?.IsAnimationPaused
+            </td>
+        </tr>
+    </tbody>
+</table>
+ <br/>
+<table>
+    <tbody>
+        <tr>
+            <td>
+                <button @onclick="@(() => _lottiePlayer!.PlayAnimationAsync())">Play</button>
+            </td>
+            <td>
+                <button @onclick="@(() => _lottiePlayer!.PauseAnimationAsync())">Pause</button>
+            </td>
+            <td>
+                <button @onclick="@(() => _lottiePlayer!.StopAnimationAsync())">Stop</button>
+            </td>
+        </tr>
+    </tbody>
+</table>
+<br/>
+<b>No frills Lottie WC</b>
+<script src="https://unpkg.com/@@lottiefiles/dotlottie-wc@0.6.2/dist/dotlottie-wc.js" type="module"></script>
+<dotlottie-wc src="https://lottie.host/c73eae41-b2be-42bb-9718-89adb9f82c9f/XK4evGprVz.lottie" style="width: 300px;height: 300px" speed="1" autoplay loop></dotlottie-wc>
+
+@code {
+    LottiePlayer? _lottiePlayer;
+}

@@ -2,6 +2,9 @@
 const blazorLottiePlayerStore = new WeakMap();
 
 export function initialize(dotNetRef, elementRef, options) {
+    console.log(dotNetRef);
+    console.log(elementRef);
+    console.log(options);
     const animation = lottie.loadAnimation({
         container: elementRef,
         renderer: options.renderer,
@@ -9,8 +12,9 @@ export function initialize(dotNetRef, elementRef, options) {
         autoplay: false,
         path: options.path
     });
-
+    console.log(animation);
     let success = animation !== null && animation !== undefined;
+    console.log(success);
     if (!success) {
         console.error("Failed to load Lottie animation. Check the path and options.");
         return false;
@@ -23,14 +27,18 @@ export function initialize(dotNetRef, elementRef, options) {
         options: options,
     });
 
+    console.log(blazorLottiePlayerStore);
+
     // Set up options
     success = setOptions(elementRef);
+    console.log(`setOptions: ${success}`)
     if (!success) {
         console.error("Failed to set options for Lottie animation.");
         return false;
     }
     // Set up event listeners
     success = addEvents(elementRef);
+    console.log(`addEvents: ${success}`);
     if (!success) {
         console.error("Failed to add event listeners for Lottie animation.");
         return false;
@@ -39,6 +47,7 @@ export function initialize(dotNetRef, elementRef, options) {
     if (options.autoplay) {
         // If autoplay is true, play the animation immediately
         animation.play();
+        console.log("play");
     }
     return true; // Return success status
 }
@@ -62,6 +71,7 @@ function addEvents(elementRef) {
     if (stored?.animation && stored?.dotNetRef && stored?.options) {
         const animation = stored.animation;
         const dotNetAdapter = stored.dotNetRef;
+        const options = stored.options;
 
         // Add event listeners
         animation.addEventListener('dataready', () => {

@@ -44,9 +44,9 @@ namespace Blazor.Lottie.Player.UnitTests
             var element = comp.Find($"#{comp.Instance.ElementId}");
             element.Should().NotBeNull();
 
-            var field = typeof(LottiePlayer).GetField("ElementRef", BindingFlags.NonPublic | BindingFlags.Instance);
-            field.Should().NotBeNull();
-            var elementRef = (ElementReference)field.GetValue(comp.Instance)!;
+            var prop = typeof(LottiePlayer).GetProperty("ElementRef", BindingFlags.NonPublic | BindingFlags.Instance);
+            prop.Should().NotBeNull();
+            var elementRef = (ElementReference)prop.GetValue(comp.Instance)!;
             elementRef.ShouldBeElementReferenceTo(element);
 
             // Assert Defaults
@@ -63,9 +63,68 @@ namespace Blazor.Lottie.Player.UnitTests
             options.SmoothFrameInterpolation.Should().BeTrue();
 
             comp.Instance.IsAnimationLoaded.Should().BeTrue();
-            comp.Instance.IsAnimationPaused.Should().Be(comp.Instance.AutoPlay);
+            comp.Instance.IsAnimationPaused.Should().Be(!comp.Instance.AutoPlay);
             comp.Instance.CurrentAnimationFrame.Should().Be(0.0);
         }
+
+        [Test]
+        public void LottiePlayer_RendersUserAttributes()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+                .Add(p => p.UserAttributes, new Dictionary<string, object> { { "data-test", "abc" }, { "aria-label", "lottie" } })
+            );
+            var element = comp.Find($"#{comp.Instance.ElementId}");
+            element.HasAttribute("data-test").Should().BeTrue();
+            element.GetAttribute("data-test").Should().Be("abc");
+            element.GetAttribute("aria-label").Should().Be("lottie");
+        }
+
+        [Test]
+        public void LottiePlayer_ClassnameAndStylename_NullOrWhitespace()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+                .Add(p => p.Class, null)
+                .Add(p => p.Style, "   ")
+            );
+            var element = comp.Find($"#{comp.Instance.ElementId}");
+            element.ClassList.Should().Contain("blazor-lottie-player");
+            element.GetAttribute("style").Should().BeNullOrWhiteSpace();
+        }
+
+        [Test]
+        public void LottiePlayer_PublicMethods_ThrowIfModuleNull()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+            );
+            // Simulate module disposal
+            comp.Instance.GetType().GetField("_lottiePlayerModule", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(comp.Instance, null);
+
+            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.PlayAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.PauseAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.StopAnimationAsync());
+            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.SetSpeedAsync(1.0));
+            Assert.ThrowsAsync<InvalidOperationException>(() => comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward));
+        }
+
+        [Test]
+        public void LottiePlayer_ThrowsIfJsModuleFailsToLoad()
+        {
+            var moduleMock = Context.JSInterop.SetupModule("./content/Blazor.Lottie.Player/loadLottieWeb.js");
+            moduleMock.Setup<bool>("initialize", _ => false);
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                Context.RenderComponent<LottiePlayer>(parameters => parameters
+                    .Add(p => p.Src, "https://example.com/lottie.json")
+                )
+            );
+            ex.Message.Should().Contain("Failed to initialize Lottie Web Player Module");
+        }
+
+
 
         [Test]
         public void LottiePlayer_InitShouldReinitReasonably()
@@ -151,6 +210,43 @@ namespace Blazor.Lottie.Player.UnitTests
             comp.Instance.IsAnimationPaused.Should().BeTrue();
         }
 
+        [Test]
+        public void LottiePlayer_Events()
+        {
+            bool handledom = false,
+                 handleenterframe = false,
+                 handlecomplete = false,
+                 handleloopcomplete = false,
+                 handleanimationready = false;
+
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, LottieSrc)
+                .Add(p => p.DOMLoaded, (() => handledom = true))
+                .Add(p => p.AnimationReady, () => handleenterframe = true)
+                .Add(p => p.AnimationCompleted, (isLooping) => handlecomplete = true)
+                .Add(p => p.AnimationLoopCompleted, (isLooping) => handleloopcomplete = true)
+                .Add(p => p.CurrentFrameChanged, (args) => handleanimationready = true)
+            );
+            // invoke the methods that invoke the events
+            var domloadedMethod = typeof(LottiePlayer).GetMethod("HandleDOMLoaded", BindingFlags.NonPublic | BindingFlags.Instance);
+            domloadedMethod!.Invoke(comp.Instance, new object[] { this, new LottiePlayerLoadedEventArgs() });
+            var animationReadyMethod = typeof(LottiePlayer).GetMethod("HandleAnimationReady", BindingFlags.NonPublic | BindingFlags.Instance);
+            animationReadyMethod!.Invoke(comp.Instance, new object[] { this, new LottiePlayerLoadedEventArgs() });
+            var animationCompletedMethod = typeof(LottiePlayer).GetMethod("HandleAnimationCompleted", BindingFlags.NonPublic | BindingFlags.Instance);
+            animationCompletedMethod!.Invoke(comp.Instance, new object[] { this, true });
+            var loopCompleteMethod = typeof(LottiePlayer).GetMethod("HandleAnimationLoopCompleted", BindingFlags.NonPublic | BindingFlags.Instance);
+            loopCompleteMethod!.Invoke(comp.Instance, new object[] { this, true });
+            var currentFrameChangedMethod = typeof(LottiePlayer).GetMethod("HandleCurrentFrameChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+            currentFrameChangedMethod!.Invoke(comp.Instance, new object[] { this, 17.0 });
+
+            // Check event invocations
+            handledom.Should().BeTrue();
+            handleenterframe.Should().BeTrue();
+            handlecomplete.Should().BeTrue();
+            handleloopcomplete.Should().BeTrue();
+            handleanimationready.Should().BeTrue();
+        }
+
 #pragma warning disable CS8619
         public static IEnumerable<object[]> CurrentFrameChangeFuncCases()
         {
@@ -186,5 +282,45 @@ namespace Blazor.Lottie.Player.UnitTests
             }
         }
 
+        [Test]
+        public void LottiePlayer_CurrentFrameChangeFunc_False_DoesNotInvokeEvent()
+        {
+            bool eventInvoked = false;
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+                .Add(p => p.CurrentFrameChangeFunc, (Func<double, bool>)(_ => false))
+                .Add(p => p.CurrentFrameChanged, (Action<double>)(_ => eventInvoked = true))
+            );
+            // Use reflection to invoke the private handler
+            var method = typeof(LottiePlayer).GetMethod("HandleCurrentFrameChanged", BindingFlags.NonPublic | BindingFlags.Instance);
+            method!.Invoke(comp.Instance, new object[] { null, 42.0 });
+            eventInvoked.Should().BeFalse();
+        }
+
+        [Test]
+        public async Task LottiePlayer_DisposeAsync_Idempotent()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+            );
+            await comp.Instance.DisposeAsync();
+            // Should not throw or double-dispose
+            await comp.Instance.DisposeAsync();
+        }
+
+        [Test]
+        public async Task LottiePlayer_InitCount_AfterDisposeAndReinit()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+            );
+            var field = typeof(LottiePlayer).GetField("_initCount", BindingFlags.NonPublic | BindingFlags.Instance);
+            int initCount = (int)field!.GetValue(comp.Instance)!;
+            await comp.Instance.DisposeAsync();
+            // Re-initialize by changing a key parameter
+            comp.SetParametersAndRender(p => p.Add(x => x.Src, "https://example.com/other.json"));
+            int newInitCount = (int)field.GetValue(comp.Instance)!;
+            newInitCount.Should().Be(initCount + 1);
+        }
     }
 }
