@@ -139,6 +139,18 @@ public class LottiePlayerModule : IAsyncDisposable
         return _lottieAnimationRef!.InvokeVoidAsync("setDirection", dir);
     }
 
+    /// <summary>
+    /// Executes javascript directly from the Lottie animation reference. So you can call any method that is available on the Lottie animation object.
+    /// </summary>
+    /// <param name="action"></param>
+    /// <param name="args"></param>
+    /// <returns></returns>
+    public ValueTask ExecuteActionAsync(string action, params object?[]? args)
+    {
+        if (!CanExecute) return ValueTask.CompletedTask;
+        return _lottieAnimationRef!.InvokeVoidAsync(action, args);
+    }
+
     #endregion
 
     #region Events

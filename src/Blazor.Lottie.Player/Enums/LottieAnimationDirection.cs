@@ -11,5 +11,5 @@ public enum LottieAnimationDirection
     /// <summary>
     /// Represents the reverse direction an animation will play.
     /// </summary>
-    Reverse = 2,
+    Reverse = -1,
 }
