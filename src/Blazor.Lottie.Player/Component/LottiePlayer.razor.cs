@@ -206,9 +206,14 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     #region Component Public Properties
 
     /// <summary>
+    /// The total number of frames in the animation. This is set when the animation is loaded and ready for playback.
+    /// </summary>
+    public double TotalAnimationFrames => LottiePlayerModule?.TotalFrames ?? 0.0;
+
+    /// <summary>
     /// Gets the current animation frame as a double-precision value. This is updated during playback by the EventCallback of CurrentFrameChanged.
     /// </summary>
-    public double CurrentAnimationFrame { get; private set; } = 0.0;
+    public double CurrentAnimationFrame => LottiePlayerModule?.CurrentFrame ?? 0.0;
 
     /// <summary>
     /// Gets a value indicating whether the animation has been loaded and is ready for playback.
@@ -244,8 +249,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         if (IsAnimationStopped)
         {
             // If the animation is stopped, we need to reset the frame to 0 before playing
-            CurrentAnimationFrame = 0.0;
-            await LottiePlayerModule.GoToAndPlay(CurrentAnimationFrame, true);
+            await LottiePlayerModule.GoToAndPlay(0.0, true);
             IsAnimationStopped = false;
         }
 
@@ -267,8 +271,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         }
         if (IsAnimationStopped)
         {
-            CurrentAnimationFrame = 0.0;
-            await LottiePlayerModule.GoToAndStop(CurrentAnimationFrame, true);
+            await LottiePlayerModule.GoToAndStop(0.0, true);
             IsAnimationStopped = false;
         }
         IsAnimationPaused = true;
@@ -351,7 +354,6 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
 
     private void HandleCurrentFrameChanged(object? sender, LottiePlayerEventFrameArgs args)
     {
-        CurrentAnimationFrame = args.CurrentTime;
         if (CurrentFrameChangeFunc == null || CurrentFrameChangeFunc.Invoke(args.CurrentTime))
         {
             CurrentFrameChanged.InvokeAsync(args);

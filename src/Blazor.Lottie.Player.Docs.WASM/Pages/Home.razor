@@ -52,7 +52,7 @@
     <MudText Typo="Typo.h6">Example 3: Direction Control</MudText>
     <div style="width:300px;">
         <LottiePlayer @ref="@_lottiePlayer3"
-                      Src="@_lottieList[2].Src"
+                      Src="@_lottieList[2].Src" CurrentFrameChanged="@LottiePlayer_OnCurrentFrameChanged"
                       AnimationDirection="@((LottieAnimationDirection)_direction3)" />
     </div>
     <MudStack Row="true" Spacing="2" Class="mt-2">
@@ -60,7 +60,7 @@
             <MudSelectItem Value="1">Forward</MudSelectItem>
             <MudSelectItem Value="-1">Reverse</MudSelectItem>
         </MudSelect>
-        <MudText>Frame: @_lottiePlayer3?.CurrentAnimationFrame</MudText>
+        <MudText>Frame: @_lottiePlayer3?.CurrentAnimationFrame of @_lottiePlayer3!.TotalAnimationFrames</MudText>
         <MudButton Variant="Variant.Filled" OnClick="@(async () => await _lottiePlayer3!.SetDirectionAsync((LottieAnimationDirection)_direction3))">Set Direction</MudButton>
     </MudStack>
 </MudPaper>
@@ -151,6 +151,14 @@
         else
         {
             Snackbar.Add("Please provide both name and source URL for the Lottie animation.", Severity.Error);
+        }
+    }
+
+    private void LottiePlayer_OnCurrentFrameChanged(LottiePlayerEventFrameArgs e)
+    {
+        if (e.CurrentTime > 99999999)
+                {
+            Snackbar.Add("Current time exceeds the maximum limit.", Severity.Warning);
         }
     }
 }

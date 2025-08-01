@@ -36,6 +36,16 @@ public class LottiePlayerModule : IAsyncDisposable
     }
 
     /// <summary>
+    /// The current time/frame as reported back after EventFrame events.
+    /// </summary>
+    public double CurrentFrame { get; private set; } = 0.0;
+
+    /// <summary>
+    /// The total number of frames in the animation as returned by AnimationReady
+    /// </summary>
+    public double TotalFrames { get; private set; } = 0.0;
+
+    /// <summary>
     /// Initializes the Lottie player with the specified playback options.
     /// </summary>
     /// <remarks>This method imports the required JavaScript module and invokes the initialization logic for
@@ -125,7 +135,8 @@ public class LottiePlayerModule : IAsyncDisposable
     public ValueTask SetDirectionAsync(LottieAnimationDirection direction)
     {
         if (!CanExecute) return ValueTask.CompletedTask;
-        return _lottieAnimationRef!.InvokeVoidAsync("setDirection", (int)direction);
+        var dir = (int)direction;
+        return _lottieAnimationRef!.InvokeVoidAsync("setDirection", dir);
     }
 
     #endregion
@@ -164,7 +175,7 @@ public class LottiePlayerModule : IAsyncDisposable
     public Task AnimationReadyEvent(LottiePlayerLoadedEventArgs args)
     {
         if (!CanExecute) return Task.CompletedTask;
-
+        TotalFrames = args.TotalFrames;
         OnAnimationReady?.Invoke(this, args);
         return Task.CompletedTask;
     }
@@ -217,7 +228,7 @@ public class LottiePlayerModule : IAsyncDisposable
     public Task EnterFrameEvent(LottiePlayerEventFrameArgs args)
     {
         if (!CanExecute) return Task.CompletedTask;
-
+        CurrentFrame = args.CurrentTime;
         OnEnterFrame?.Invoke(this, args);
         return Task.CompletedTask;
     }
