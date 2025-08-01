@@ -49,7 +49,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         {
             var dict = UserAttributes != null
                 ? new Dictionary<string, object?>(UserAttributes)
-                : new Dictionary<string, object?>();
+                : [];
 
             dict.TryAdd("aria-label", "Lottie Animation");
             dict.TryAdd("role", "animation");

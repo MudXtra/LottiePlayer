@@ -90,7 +90,7 @@ namespace Blazor.Lottie.Player.UnitTests
             element.GetAttribute("aria-label").Should().Be("Lottie Animation");
 
             comp.SetParametersAndRender(parameters => parameters
-                .Add(p => p.UserAttributes, new Dictionary<string, object>
+                .Add(p => p.UserAttributes, new Dictionary<string, object?>
                 {
                     { "data-test", "abc" },
                     { "aria-label", "lottie" }
@@ -126,7 +126,7 @@ namespace Blazor.Lottie.Player.UnitTests
             );
             // Simulate module disposal
             comp.Instance.LottiePlayerModule.Should().NotBeNull();
-            comp.InvokeAsync(() => comp.Instance.DisposeAsync().GetAwaiter().GetResult());
+            comp.InvokeAsync(() => comp.Instance.DisposeAsync());
             comp.Instance.LottiePlayerModule.Should().BeNull();
 
             Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.PlayAnimationAsync());
@@ -168,7 +168,7 @@ namespace Blazor.Lottie.Player.UnitTests
             comp.SetParametersAndRender(parameters => parameters
                 .Add(p => p.Class, "test-class")
                 .Add(p => p.Style, "width: 100%; height: 100%;")
-                .Add(p => p.UserAttributes, new Dictionary<string, object>
+                .Add(p => p.UserAttributes, new Dictionary<string, object?>
                 {
                     { "data-test", "test-value" }
                 })
