@@ -8,7 +8,7 @@ public class LottieAnimationOptions
     /// <summary>
     /// Gets or sets the URL of the Lottie JavaScript library used for rendering Lottie animations.
     /// </summary>
-    public string LottieSourceJs { get; set; } = "./_content/Blazor.Lottie.Player/lottie.min.js";
+    public string LottieSourceJs { get; set; } = "https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.13.0/lottie.min.js";
 
     /// <summary>
     /// Gets or sets the quality level of the Lottie animation rendering. This is a global setting.

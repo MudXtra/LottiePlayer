@@ -5,7 +5,10 @@ export async function initialize(source) {
             return true;
         }
         await injectJsLibrary(source);
-        return true;
+        if (window.lottie && typeof window.lottie === "object") {
+            return true;
+        }
+        return false;
     }
     catch (error) {
         console.error("Error initializing Lottie Web:", error);
@@ -40,14 +43,15 @@ export async function injectJsLibrary(source) {
 
 function waitForLottie(resolve, reject) {
     const start = Date.now();
-    const timeout = 250;
-    const interval = 10;
+    const timeout = 1000;
+    const interval = 25;
 
     function check() {
         if (window.lottie && typeof window.lottie === "object") {
             resolve();
         } else if (Date.now() - start >= timeout) {
-            reject(new Error("Lottie did not become available within 250ms"));
+            console.error(`Lottie did not become available within ${timeout}ms, continuing load.`);
+            resolve();
         } else {
             setTimeout(check, interval);
         }

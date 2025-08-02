@@ -19,6 +19,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     public readonly string ElementId = Identifier.Create("lottie-");
     private string? _failMessage = null;
+    private bool _lottieLoaded = false;
     /// <summary>
     /// The module used to control Lottie Player functionality.
     /// </summary>
@@ -437,14 +438,17 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender || !_lottieLoaded)
         {
             // load the Lottie Web Player JS from CDN
             var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
-            var result = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs);
-            if (!result)
+            // if cdn failed on 2nd try let's swap to local copy
+            var initJs = firstRender ? AnimationOptions.LottieSourceJs : "./_content/Blazor.Lottie.Player/lottie.min.js";
+            _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", initJs);
+            if (!_lottieLoaded)
             {
-                throw new InvalidOperationException("Failed to initialize Lottie Web Player Module");
+                StateHasChanged();
+                return;
             }
             await InitializeLottieModule();
         }
