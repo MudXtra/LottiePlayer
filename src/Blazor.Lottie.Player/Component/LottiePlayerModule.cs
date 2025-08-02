@@ -173,6 +173,9 @@ public class LottiePlayerModule : IAsyncDisposable
     /// <summary>
     /// Triggers when the Lottie animation completes playing.
     /// </summary>
+    /// <remarks>
+    /// If an animation is set to loop indefinitely, this event will not be triggered.
+    /// </remarks>
     public event EventHandler<bool>? OnComplete;
 
     /// <summary>
