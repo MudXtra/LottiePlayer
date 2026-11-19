@@ -122,21 +122,21 @@ namespace Blazor.Lottie.Player.UnitTests
         }
 
         [Test]
-        public void LottiePlayer_PublicMethods_ThrowIfModuleNull()
+        public async Task LottiePlayer_PublicMethods_ThrowIfModuleNull()
         {
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
                 .Add(p => p.Src, "https://example.com/lottie.json")
             );
             // Simulate module disposal
             comp.Instance.LottiePlayerModule.Should().NotBeNull();
-            comp.InvokeAsync(() => comp.Instance.DisposeAsync());
+            await comp.InvokeAsync(() => comp.Instance.DisposeAsync());
             comp.Instance.LottiePlayerModule.Should().BeNull();
 
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.PlayAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.PauseAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.StopAnimationAsync());
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.SetSpeedAsync(1.0));
-            Assert.ThrowsAsync<InvalidOperationException>(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward));
+            await FluentActions.Awaiting(async () => await comp.Instance.PlayAnimationAsync()).Should().ThrowAsync<InvalidOperationException>();
+            await FluentActions.Awaiting(async () => await comp.Instance.PauseAnimationAsync()).Should().ThrowAsync<InvalidOperationException>();
+            await FluentActions.Awaiting(async () => await comp.Instance.StopAnimationAsync()).Should().ThrowAsync<InvalidOperationException>();
+            await FluentActions.Awaiting(async () => await comp.Instance.SetSpeedAsync(1.0)).Should().ThrowAsync<InvalidOperationException>();
+            await FluentActions.Awaiting(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward)).Should().ThrowAsync<InvalidOperationException>();
         }
 
         [Test]
