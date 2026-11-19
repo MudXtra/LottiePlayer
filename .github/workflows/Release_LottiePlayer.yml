@@ -1,0 +1,262 @@
+name: Release LottiePlayer
+
+# To release: merge a PR to main that changes <Version> in src/Blazor.Lottie.Player/Blazor.Lottie.Player.csproj.
+# Ordinary merges find everything already released and stop after the plan job.
+# Re-run a failed release with "Run workflow" on main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lottieplayer-release
+  cancel-in-progress: false
+
+env:
+  PROJECT: src/Blazor.Lottie.Player/Blazor.Lottie.Player.csproj
+  PACKAGE_ID: Blazor.Lottie.Player
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      is_newest: ${{ steps.plan.outputs.is_newest }}
+      need_nuget: ${{ steps.plan.outputs.need_nuget }}
+      need_release: ${{ steps.plan.outputs.need_release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$REPO" = "MudXtra/LottiePlayer" ] && [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Releases on MudXtra/LottiePlayer run only from main (got $REF)"; exit 1
+          fi
+          version=$(grep -oPm1 '(?<=<Version>)[^<]+' "$PROJECT")
+          if ! [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Version '$version' is not stable SemVer X.Y.Z"; exit 1
+          fi
+
+          # NuGet: 200 = index, 404 = package never pushed; anything else is an error.
+          code=$(curl -sS -o nuget.json -w '%{http_code}' "https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID,,}/index.json")
+          case "$code" in
+            200) jq -e '.versions|type=="array"' nuget.json >/dev/null; jq -r '.versions[]' nuget.json > nuget-versions ;;
+            404) : > nuget-versions ;;
+            *) echo "::error::NuGet index lookup returned HTTP $code"; exit 1 ;;
+          esac
+          have_nuget=false
+          grep -qxF "$version" nuget-versions && have_nuget=true
+
+          # GitHub Release: the tag endpoint hides drafts, so 200 means published.
+          # gh exits non-zero on 404 but still prints the status line with --include.
+          gh api "repos/$REPO/releases/tags/v$version" --include > release-tag.http || true
+          code=$(sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p' release-tag.http)
+          have_release=false
+          case "$code" in
+            200) have_release=true ;;
+            404) ;;
+            *) echo "::error::GitHub release lookup returned HTTP '${code:-none}'"; exit 1 ;;
+          esac
+
+          # Highest stable version already published (NuGet + GitHub Releases).
+          # List to a file first so a failed listing fails the job (set -e); only the filter may be empty.
+          gh api "repos/$REPO/releases" --paginate --jq '.[]|select(.draft|not)|.tag_name|ltrimstr("v")' > release-tags
+          { cat nuget-versions release-tags | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V > published
+          highest=$(tail -1 published || true)
+          is_newest=true
+          if [ -n "$highest" ]; then
+            top=$(printf '%s\n%s\n' "$highest" "$version" | sort -V | tail -1)
+            if [ "$top" != "$version" ]; then
+              is_newest=false
+              if [ "$have_nuget" != true ]; then
+                echo "::error::Version $version is lower than published $highest and is not on NuGet"; exit 1
+              fi
+            fi
+          fi
+
+          release=true
+          if $have_nuget && $have_release; then release=false; fi
+          echo "version=$version nuget=$have_nuget release=$have_release newest=$is_newest -> release=$release"
+          {
+            echo "release=$release"
+            echo "version=$version"
+            echo "sha=$SHA"
+            echo "is_newest=$is_newest"
+            echo "need_nuget=$([ $have_nuget = true ] && echo false || echo true)"
+            echo "need_release=$([ $have_release = true ] && echo false || echo true)"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release plan"
+            echo "Version \`$version\` at \`$SHA\`"
+            echo "- NuGet: $have_nuget"
+            echo "- GitHub Release: $have_release"
+            echo "- Release needed: $release"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+            11.0.x
+      - name: Build every shipped target
+        run: |
+          for framework in net8.0 net9.0 net10.0 net11.0; do
+            dotnet build "$PROJECT" -c Release -f "$framework"
+          done
+      - name: Unit tests
+        run: dotnet test tests/Blazor.Lottie.Player.UnitTests/Blazor.Lottie.Player.UnitTests.csproj -c Release
+      - name: Pack
+        run: dotnet pack "$PROJECT" -c Release --no-build -o release-artifacts/packages /p:Version="$VERSION" /p:PackageId="$PACKAGE_ID"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: release-artifacts/packages/*
+          if-no-files-found: error
+
+  nuget:
+    needs: [plan, build]
+    if: needs.plan.outputs.need_nuget == 'true'
+    runs-on: ubuntu-latest
+    # NuGet Trusted Publishing binds to this workflow file name and environment; keep the push here.
+    environment: nuget-release
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      NUGET_USERNAME: ${{ secrets.NUGET_USERNAME }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Require NuGet username
+        id: gate
+        run: |
+          if [ -n "$NUGET_USERNAME" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$REPO" = "MudXtra/LottiePlayer" ]; then
+            echo "::error::Secret NUGET_USERNAME is not set"; exit 1
+          fi
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::NUGET_USERNAME not set on $REPO; skipping NuGet publish"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          name: packages
+          path: packages
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          dotnet-version: 10.0.x
+      - name: NuGet login (trusted publishing)
+        if: steps.gate.outputs.enabled == 'true'
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ${{ secrets.NUGET_USERNAME }}
+      - name: Push packages
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" --skip-duplicate --source https://api.nuget.org/v3/index.json
+          dotnet nuget push "packages/*.snupkg" --api-key "$NUGET_API_KEY" --skip-duplicate --source https://api.nuget.org/v3/index.json
+
+  github-release:
+    needs: [plan, build, nuget]
+    # nuget may be skipped (already published, or fork without NuGet setup); never when it failed.
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.need_release == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      IS_NEWEST: ${{ needs.plan.outputs.is_newest }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packages
+      - name: Create or publish release
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          latest=false; [ "$IS_NEWEST" = true ] && latest=true
+
+          # Never move an existing tag that points elsewhere.
+          # 200 = exists, 404 = absent; anything else is an error.
+          peel() {
+            local ref t
+            ref=$(gh api "repos/$GH_REPO/git/ref/tags/$tag" --jq '[.object.type,.object.sha]|@tsv')
+            t=${ref%%$'\t'*}; tag_sha=${ref#*$'\t'}
+            while [ "$t" = tag ]; do
+              ref=$(gh api "repos/$GH_REPO/git/tags/$tag_sha" --jq '[.object.type,.object.sha]|@tsv')
+              t=${ref%%$'\t'*}; tag_sha=${ref#*$'\t'}
+            done
+          }
+          gh api "repos/$GH_REPO/git/ref/tags/$tag" --include > tag-ref.http || true
+          code=$(sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p' tag-ref.http)
+          case "$code" in
+            200)
+              peel
+              if [ "$tag_sha" != "$SHA" ]; then
+                echo "::error::Tag $tag already points to $tag_sha, not $SHA"; exit 1
+              fi ;;
+            404) ;;
+            *) echo "::error::Tag lookup returned HTTP '${code:-none}'"; exit 1 ;;
+          esac
+
+          # A tagless draft reports tag_name "untagged-<hash>", so match on tag or on release name.
+          draft=$(gh api "repos/$GH_REPO/releases" --paginate --jq ".[]|select(.draft and (.tag_name==\"$tag\" or (.name==\"$tag\" and (.tag_name|startswith(\"untagged-\")))))|[.id,.tag_name]|@tsv" | head -1)
+          if [ -n "$draft" ]; then
+            draft_id=${draft%%$'\t'*}
+            draft_tag=${draft#*$'\t'}
+            echo "Reusing draft release $draft_id (tag_name $draft_tag) for $tag"
+            for f in packages/*; do
+              name=$(basename "$f")
+              old=$(gh api "repos/$GH_REPO/releases/$draft_id/assets" --jq ".[]|select(.name==\"$name\")|.id")
+              if [ -n "$old" ]; then gh api -X DELETE "repos/$GH_REPO/releases/assets/$old"; fi
+              gh release upload "$draft_tag" "$f"
+            done
+            gh api -X PATCH "repos/$GH_REPO/releases/$draft_id" -F draft=false -f tag_name="$tag" -f name="$tag" -f target_commitish="$SHA" -f make_latest="$latest" >/dev/null
+          else
+            gh release create "$tag" packages/* --target "$SHA" --title "$tag" --generate-notes --latest="$latest"
+          fi
+
+          peel
+          if [ "$tag_sha" != "$SHA" ]; then
+            echo "::error::Published tag $tag peels to $tag_sha, not $SHA"; exit 1
+          fi
+          echo "Release $tag published; tag commit $tag_sha"
+          gh release view "$tag" --json isDraft,tagName,targetCommitish,url
