@@ -20,7 +20,7 @@ public class DisposalDuringInitTests : BunitTest
         var reinit = comp.InvokeAsync(() => comp.Instance.SetParametersAsync(
             ParameterView.FromDictionary(new Dictionary<string, object?> { ["Src"] = "https://example.com/b.json" })));
         await Task.Delay(30); // reinit is now awaiting the new animation's initialize
-        await comp.InvokeAsync(() => comp.Instance.DisposeAsync());
+        await comp.InvokeAsync(async () => await comp.Instance.DisposeAsync());
         await reinit;
 
         js.Destroyed.Should().Be(js.Created, "every created animation should be destroyed after component disposal");
@@ -76,11 +76,17 @@ public class DisposalDuringInitTests : BunitTest
             await Task.Delay(100);
             Interlocked.Increment(ref Created);
             var anim = new Mock<IJSObjectReference>();
+            // destroy completes asynchronously, like a real JS call, so a test that does not await disposal fails every time
             anim.Setup(a => a.InvokeAsync<IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
-                .Callback<string, object?[]?>((id, _) => { if (id == "destroy") Interlocked.Increment(ref Destroyed); })
-                .Returns(new ValueTask<IJSVoidResult>(default(IJSVoidResult)!));
+                .Returns((string id, object?[]? _) => new ValueTask<IJSVoidResult>(Invoke(id)));
             anim.Setup(a => a.DisposeAsync()).Returns(ValueTask.CompletedTask);
             return anim.Object;
+        }
+        private async Task<IJSVoidResult> Invoke(string identifier)
+        {
+            await Task.Delay(20);
+            if (identifier == "destroy") Interlocked.Increment(ref Destroyed);
+            return default!;
         }
     }
 }
