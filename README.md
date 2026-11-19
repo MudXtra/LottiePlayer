@@ -10,7 +10,20 @@ Blazor Lottie Player makes it easy to integrate high-quality Lottie animations i
 
 Add [Blazor.Lottie.Player](https://mudx.org/docs/lottie) to your project via NuGet.
 
-### 2. Choose How to Use the Component
+### 2. Use an Interactive Render Mode
+
+`LottiePlayer` loads and controls the animation through JavaScript interop, so it only works on an **interactive** page. In a Blazor Web App (including the MudBlazor and Blazor templates, which render pages with static server rendering by default), a page that has no render mode shows an empty `<div>` and logs no error. Mark the page (or the whole app) interactive:
+
+```razor
+@page "/"
+@rendermode InteractiveServer
+
+<LottiePlayer Style="height: 200px;" Src="https://lottie.host/382bbcd7-e7b1-4a30-90cd-884a9c7c3bb1/F7I9nPKEr1.json" />
+```
+
+Use `InteractiveWebAssembly` or `InteractiveAuto` the same way. Interactive Server and Blazor WebAssembly apps that already run every page interactively need no change.
+
+### 3. Choose How to Use the Component
 
 There are two ways to use Blazor Lottie Player:
 
@@ -51,10 +64,10 @@ There are two ways to use Blazor Lottie Player:
   player.OnLoopComplete += () => { /* Handle Loop Complete */ };
   ```
 
-### 3. Read the Docs
+### 4. Read the Docs
 
 Visit the [Blazor Lottie Player documentation](https://mudx.org/docs/lottie) for detailed usage instructions, examples, and API reference.
 
-### 4. Get Help, Support, or Contribute
+### 5. Get Help, Support, or Contribute
 
 If you need help, want to report an issue, or would like to support or contribute to the project, please visit the [GitHub repository](https://github.com/MudXtra/LottiePlayer) for more information.
