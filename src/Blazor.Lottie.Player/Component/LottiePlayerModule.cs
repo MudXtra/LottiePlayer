@@ -256,24 +256,38 @@ public class LottiePlayerModule : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _isDisposing = true;
-        if (_lottieAnimationRef is not null)
+        try
         {
-            try
-            {
-                await _lottieAnimationRef.InvokeVoidAsync("destroy");
-            }
-            catch (JSException)
-            {
-                // Ignore JS exceptions during dispose, as the module may already be disposed.
-            }
-            await _lottieAnimationRef.DisposeAsync();
+            var animationRef = _lottieAnimationRef;
             _lottieAnimationRef = null;
+            if (animationRef is not null)
+            {
+                try
+                {
+                    await animationRef.InvokeVoidAsync("destroy");
+                }
+                catch (Exception ex) when (IsIgnorableDisposeException(ex))
+                {
+                    // The JS side may already be gone (circuit lost, page navigated, module disposed).
+                }
+                try
+                {
+                    await animationRef.DisposeAsync();
+                }
+                catch (Exception ex) when (IsIgnorableDisposeException(ex))
+                {
+                    // Same as above: nothing left to release on the JS side.
+                }
+            }
         }
-        if (_dotNetReference is not null)
+        finally
         {
-            _dotNetReference.Dispose();
+            _dotNetReference?.Dispose();
             _dotNetReference = null;
         }
         GC.SuppressFinalize(this);
     }
+
+    private static bool IsIgnorableDisposeException(Exception ex) =>
+        ex is JSException or JSDisconnectedException or OperationCanceledException or ObjectDisposedException;
 }

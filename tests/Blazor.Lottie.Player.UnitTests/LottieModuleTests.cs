@@ -206,4 +206,43 @@ public class LottieModuleTests : BunitTest
         animationRef.Verify(r => r.InvokeAsync<IJSVoidResult>("goToAndStop",
             It.Is<object?[]?>(a => a!.Length == 2 && (double)a[0]! == 12d && (bool)a[1]! == true)), Times.Once);
     }
+
+    private static IEnumerable<Func<Exception>> DisposeExceptions()
+    {
+        yield return () => new JSDisconnectedException("circuit gone");
+        yield return () => new TaskCanceledException();
+        yield return () => new OperationCanceledException();
+        yield return () => new ObjectDisposedException("ref");
+        yield return () => new JSException("already destroyed");
+    }
+
+    [TestCaseSource(nameof(DisposeExceptions))]
+    public async Task LottiePlayerModule_Dispose_ToleratesDestroyFailure(Func<Exception> makeException)
+    {
+        var (module, animationRef) = CreateModuleWithMockedRef();
+        animationRef
+            .Setup(r => r.InvokeAsync<IJSVoidResult>("destroy", It.IsAny<object?[]?>()))
+            .Returns(new ValueTask<IJSVoidResult>(Task.FromException<IJSVoidResult>(makeException())));
+        var dotNetRef = module._dotNetReference;
+
+        await module.Invoking(m => m.DisposeAsync().AsTask()).Should().NotThrowAsync();
+
+        module._lottieAnimationRef.Should().BeNull();
+        module._dotNetReference.Should().BeNull();
+        Assert.Throws<ObjectDisposedException>(() => _ = dotNetRef!.Value);
+    }
+
+    [TestCaseSource(nameof(DisposeExceptions))]
+    public async Task LottiePlayerModule_Dispose_ToleratesRefDisposeFailure(Func<Exception> makeException)
+    {
+        var (module, animationRef) = CreateModuleWithMockedRef();
+        animationRef.Setup(r => r.DisposeAsync()).Returns(new ValueTask(Task.FromException(makeException())));
+        var dotNetRef = module._dotNetReference;
+
+        await module.Invoking(m => m.DisposeAsync().AsTask()).Should().NotThrowAsync();
+
+        module._lottieAnimationRef.Should().BeNull();
+        module._dotNetReference.Should().BeNull();
+        Assert.Throws<ObjectDisposedException>(() => _ = dotNetRef!.Value);
+    }
 }
