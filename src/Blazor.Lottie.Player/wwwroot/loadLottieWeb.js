@@ -1,7 +1,10 @@
 // One in-flight load per source, shared by every player on the page. The ES module is a
 // singleton, so a second player that arrives while a script tag is still pending awaits
-// that same load instead of polling or injecting a duplicate tag.
+// that same load instead of polling or injecting a duplicate tag. Only the player that
+// injects a tag registers a load; followers never store theirs, so a failed tag cannot
+// leave a stale entry that a fallback to another source would pick up.
 const pendingLoads = new Map();
+let currentTagLoad = null; // the single in-flight tag load (only one tag exists at a time)
 
 function hasLottie() {
     return !!window.lottie && typeof window.lottie === "object";
@@ -30,13 +33,14 @@ export function injectJsLibrary(source) {
     if (pending) {
         return pending;
     }
+    const existing = document.querySelector("script[data-bodymovinjs]");
+    if (existing) {
+        // Another source is mid-load (or the tag came from elsewhere): follow that load, not a poll.
+        // If it fails, this source has not been tried yet, so try it once on its own.
+        const followed = currentTagLoad ?? new Promise(waitForLottie);
+        return followed.catch(() => (hasLottie() ? undefined : injectJsLibrary(source)));
+    }
     const load = new Promise((resolve, reject) => {
-        const existing = document.querySelector("script[data-bodymovinjs]");
-        if (existing) {
-            // Another source is mid-load (or the tag came from elsewhere): follow that load, not a poll.
-            const other = pendingLoads.values().next().value;
-            return other ? other.then(resolve, reject) : waitForLottie(resolve, reject);
-        }
         const script = document.createElement("script");
         script.setAttribute("data-bodymovinjs", "true");
         script.type = "text/javascript";
@@ -56,7 +60,11 @@ export function injectJsLibrary(source) {
         document.head.appendChild(script);
     });
     pendingLoads.set(source, load);
-    const clear = () => pendingLoads.delete(source);
+    currentTagLoad = load;
+    const clear = () => {
+        pendingLoads.delete(source);
+        if (currentTagLoad === load) currentTagLoad = null;
+    };
     load.then(clear, clear);
     return load;
 }

@@ -84,3 +84,15 @@ test("script loads but window.lottie never appears: tag removed so local fallbac
     assert.equal(scripts.length, 2);
     assert.equal(scripts[0].attached, false);
 });
+
+test("N1: CDN-primary player falls back inline while a local-primary player follows the CDN tag: both load", async () => {
+    const { mod, scripts } = await setup([
+        { prefix: "https://", delay: 200, outcome: "error" },
+        { prefix: "./", delay: 50, outcome: "load" },
+    ]);
+    const a = (async () => (await mod.initialize(CDN)) || (await mod.initialize(LOCAL)))();
+    await new Promise((r) => setTimeout(r, 10));
+    const b = mod.initialize(LOCAL); // follows A's in-flight CDN tag
+    assert.deepEqual(await Promise.all([a, b]), [true, true]);
+    assert.equal(scripts.length, 2);
+});
