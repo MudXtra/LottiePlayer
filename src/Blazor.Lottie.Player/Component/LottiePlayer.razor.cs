@@ -18,8 +18,17 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// Represents the unique identifier for a Lottie element's surrounding div.
     /// </summary>
     public readonly string ElementId = Identifier.Create("lottie-");
-    private string? _failMessage = null;
+    private string? _srcFailMessage = null;
+    private string? _scriptFailMessage = null;
+    private string? _failMessage => _scriptFailMessage ?? _srcFailMessage;
     private bool _lottieLoaded = false;
+    private bool _loadAttempted = false;
+    // Intentionally never disposed: a pending WaitAsync would throw ObjectDisposedException, and without
+    // AvailableWaitHandle a SemaphoreSlim holds no unmanaged resources. Disposal is coordinated by _disposed.
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private volatile bool _disposed;
+    private const string SrcFailMessage = "Src must be a valid JSON file path ending with .json";
+    private const string LocalLottieSourceJs = "./_content/Blazor.Lottie.Player/lottie.min.js";
     /// <summary>
     /// The module used to control Lottie Player functionality.
     /// </summary>
@@ -370,6 +379,22 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <exception cref="InvalidOperationException"></exception>
     private async Task InitializeLottieModule()
     {
+        // serialize (re)initialization so quick parameter changes cannot overlap
+        if (_disposed) return;
+        await _initLock.WaitAsync();
+        try
+        {
+            await InitializeLottieModuleCore();
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    private async Task InitializeLottieModuleCore()
+    {
+        if (_disposed) return;
         // dispose the existing module if it exists
         if (LottiePlayerModule != null && _initCount > 0)
         {
@@ -380,6 +405,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
             LottiePlayerModule = null;
             IsAnimationLoaded = false;
             IsAnimationPaused = false;
+            if (_disposed) return;
         }
         // initialize the new module with the current parameters
         LottiePlayerModule = new LottiePlayerModule(JSRuntime, ElementRef);
@@ -396,6 +422,11 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
             EnterFrameEvent = CurrentFrameChanged.HasDelegate,
         };
         IsAnimationLoaded = await LottiePlayerModule.InitializeAsync(lottiePlaybackOptions);
+        if (_disposed)
+        {
+            // disposed while initializing: DisposeAsync waits for this lock, then disposes the module
+            return;
+        }
         if (!IsAnimationLoaded)
         {
             throw new InvalidOperationException("Failed to initialize Lottie Animation");
@@ -431,27 +462,34 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         }
     }
 
-    #region Compoinent Lifecycle
+    #region Component Lifecycle
 
     /// <summary>
     /// OnAfterRenderAsync override
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender || !_lottieLoaded)
+        if (_disposed || _lottieLoaded || _loadAttempted) return;
+        _loadAttempted = true;
+
+        // load the Lottie Web Player JS from the configured source (CDN by default)
+        var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
+        if (_disposed) return;
+        _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs);
+        if (_disposed) return;
+        if (!_lottieLoaded)
         {
-            // load the Lottie Web Player JS from CDN
-            var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
-            // if cdn failed on 2nd try let's swap to local copy
-            var initJs = firstRender ? AnimationOptions.LottieSourceJs : "./_content/Blazor.Lottie.Player/lottie.min.js";
-            _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", initJs);
-            if (!_lottieLoaded)
-            {
-                StateHasChanged();
-                return;
-            }
-            await InitializeLottieModule();
+            // fall back to the local copy exactly once
+            _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", LocalLottieSourceJs);
+            if (_disposed) return;
         }
+        if (!_lottieLoaded)
+        {
+            _scriptFailMessage = "Failed to load the Lottie Web Player script.";
+            StateHasChanged();
+            return;
+        }
+        await InitializeLottieModule();
     }
 
     /// <summary>
@@ -475,8 +513,11 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         // check if Src returns is json
         if (string.IsNullOrWhiteSpace(Src) || !Src.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
         {
-            _failMessage = "Src must be a valid JSON file path ending with .json";
-
+            _srcFailMessage = SrcFailMessage;
+        }
+        else
+        {
+            _srcFailMessage = null;
         }
 
         // Check if any key parameters changed
@@ -503,13 +544,23 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <returns></returns>
     public async ValueTask DisposeAsync()
     {
-        if (LottiePlayerModule != null)
+        _disposed = true;
+        // wait for any in-flight (re)initialization so it cannot leave a live animation behind
+        await _initLock.WaitAsync();
+        try
         {
-            // cancel event handlers to prevent memory leaks
-            EventSubscription(false);
+            if (LottiePlayerModule != null)
+            {
+                // cancel event handlers to prevent memory leaks
+                EventSubscription(false);
 
-            await LottiePlayerModule.DisposeAsync();
-            LottiePlayerModule = null;
+                await LottiePlayerModule.DisposeAsync();
+                LottiePlayerModule = null;
+            }
+        }
+        finally
+        {
+            _initLock.Release();
         }
 
         GC.SuppressFinalize(this);

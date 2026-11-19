@@ -57,7 +57,14 @@ public class LottiePlayerModule : IAsyncDisposable
     {
         if (_isDisposing || _js is null) return false;
         var _module = await _js.InvokeAsync<IJSObjectReference?>("import", "./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
-        _lottieAnimationRef = await _module!.InvokeAsync<IJSObjectReference?>("initialize", _dotNetReference, _elementRef, lottiePlaybackOptions);
+        var animationRef = await _module!.InvokeAsync<IJSObjectReference?>("initialize", _dotNetReference, _elementRef, lottiePlaybackOptions);
+        if (_isDisposing)
+        {
+            // disposed while the JS side was initializing: release the animation nobody will own
+            await DestroyAnimationAsync(animationRef);
+            return false;
+        }
+        _lottieAnimationRef = animationRef;
         if (lottiePlaybackOptions.AutoPlay)
         {
             await PlayAsync();
@@ -98,33 +105,33 @@ public class LottiePlayerModule : IAsyncDisposable
     /// Moves the animation to the specified frame and starts playback from that point.
     /// </summary>
     /// <param name="frame">The frame number to move the animation to. Must be a non-negative value.</param>
-    /// <param name="force">A boolean value indicating whether to force the animation to move to the specified frame  even if it is already
-    /// playing.  <see langword="true"/> to force the action; otherwise, <see langword="false"/>.</param>
+    /// <param name="force">Retained for source compatibility; it no longer has any effect. <paramref name="frame"/> is always
+    /// interpreted as a frame number (not a 0-1 fraction of the total frames).</param>
     public ValueTask GoToAndPlay(double frame, bool force = false)
     {
         if (!CanExecute) return ValueTask.CompletedTask;
-        return _lottieAnimationRef!.InvokeVoidAsync("goToAndPlay", frame, force);
+        return _lottieAnimationRef!.InvokeVoidAsync("goToAndPlay", frame, true);
     }
 
     /// <summary>
     /// Moves the animation to the specified frame and stops playback at that point.
     /// </summary>
     /// <param name="frame">The frame number to move the animation to. Must be a non-negative value.</param>
-    /// <param name="force">A boolean value indicating whether to force the animation to move to the specified frame  even if it is already
-    /// playing.  <see langword="true"/> to force the action; otherwise, <see langword="false"/>.</param>
+    /// <param name="force">Retained for source compatibility; it no longer has any effect. <paramref name="frame"/> is always
+    /// interpreted as a frame number (not a 0-1 fraction of the total frames).</param>
     public ValueTask GoToAndStop(double frame, bool force = false)
     {
         if (!CanExecute) return ValueTask.CompletedTask;
-        return _lottieAnimationRef!.InvokeVoidAsync("goToAndStop", frame, force);
+        return _lottieAnimationRef!.InvokeVoidAsync("goToAndStop", frame, true);
     }
 
     /// <summary>
     /// Asynchronously sets the speed for the associated animation. 1 is normal speed, 2 is double speed, 0.5 is half speed, etc.
     /// </summary>
-    /// <param name="speed">The speed value to set. Must be a non-negative number.</param>
+    /// <param name="speed">The speed value to set. Must be greater than 0.</param>
     public ValueTask SetSpeedAsync(double speed)
     {
-        if (!CanExecute || speed < 0) return ValueTask.CompletedTask;
+        if (!CanExecute || speed <= 0) return ValueTask.CompletedTask;
         return _lottieAnimationRef!.InvokeVoidAsync("setSpeed", speed);
     }
 
@@ -256,24 +263,41 @@ public class LottiePlayerModule : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _isDisposing = true;
-        if (_lottieAnimationRef is not null)
+        try
         {
-            try
-            {
-                await _lottieAnimationRef.InvokeVoidAsync("destroy");
-            }
-            catch (JSException)
-            {
-                // Ignore JS exceptions during dispose, as the module may already be disposed.
-            }
-            await _lottieAnimationRef.DisposeAsync();
+            var animationRef = _lottieAnimationRef;
             _lottieAnimationRef = null;
+            await DestroyAnimationAsync(animationRef);
         }
-        if (_dotNetReference is not null)
+        finally
         {
-            _dotNetReference.Dispose();
+            _dotNetReference?.Dispose();
             _dotNetReference = null;
         }
         GC.SuppressFinalize(this);
     }
+
+    private static async Task DestroyAnimationAsync(IJSObjectReference? animationRef)
+    {
+        if (animationRef is null) return;
+        try
+        {
+            await animationRef.InvokeVoidAsync("destroy");
+        }
+        catch (Exception ex) when (IsIgnorableDisposeException(ex))
+        {
+            // The JS side may already be gone (circuit lost, page navigated, module disposed).
+        }
+        try
+        {
+            await animationRef.DisposeAsync();
+        }
+        catch (Exception ex) when (IsIgnorableDisposeException(ex))
+        {
+            // Same as above: nothing left to release on the JS side.
+        }
+    }
+
+    private static bool IsIgnorableDisposeException(Exception ex) =>
+        ex is JSException or JSDisconnectedException or OperationCanceledException or ObjectDisposedException;
 }
