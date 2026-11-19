@@ -37,8 +37,9 @@ export function injectJsLibrary(source) {
     if (existing) {
         // Another source is mid-load (or the tag came from elsewhere): follow that load, not a poll.
         // If it fails, this source has not been tried yet, so try it once on its own.
-        const followed = currentTagLoad ?? new Promise(waitForLottie);
-        return followed.catch(() => (hasLottie() ? undefined : injectJsLibrary(source)));
+        // A tag we did not inject (no tracked load) is only polled once: retrying here would loop forever.
+        if (!currentTagLoad) return new Promise(waitForLottie);
+        return currentTagLoad.catch(() => (hasLottie() ? undefined : injectJsLibrary(source)));
     }
     const load = new Promise((resolve, reject) => {
         const script = document.createElement("script");

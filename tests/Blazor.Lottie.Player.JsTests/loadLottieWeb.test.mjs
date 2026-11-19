@@ -9,8 +9,8 @@ const loaderUrl = pathToFileURL(path.resolve(import.meta.dirname, "../../src/Bla
 let n = 0;
 
 // behaviours: map of source prefix -> { delay, outcome: "load" | "error" | "load-nolottie" }
-async function setup(behaviours) {
-    const scripts = [];
+async function setup(behaviours, preexisting = []) {
+    const scripts = [...preexisting];
     globalThis.window = globalThis;
     delete globalThis.lottie;
     globalThis.document = {
@@ -95,4 +95,16 @@ test("N1: CDN-primary player falls back inline while a local-primary player foll
     const b = mod.initialize(LOCAL); // follows A's in-flight CDN tag
     assert.deepEqual(await Promise.all([a, b]), [true, true]);
     assert.equal(scripts.length, 2);
+});
+
+test("P4: a foreign data-bodymovinjs tag that never yields lottie: initialize terminates (no unbounded retry)", async () => {
+    const foreign = { src: "https://consumer/own.js", attached: true }; // not ours, never removed
+    const { mod, scripts } = await setup([], [foreign]);
+    const settled = await Promise.race([
+        mod.initialize(CDN).then((v) => ({ v })),
+        new Promise((r) => setTimeout(() => r(null), 4500)),
+    ]);
+    assert.ok(settled, "initialize still pending after 4.5s");
+    assert.equal(settled.v, false);
+    assert.equal(scripts.length, 1, "no tag injected next to the foreign one");
 });

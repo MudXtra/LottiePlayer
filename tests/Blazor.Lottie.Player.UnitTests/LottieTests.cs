@@ -142,6 +142,7 @@ namespace Blazor.Lottie.Player.UnitTests
         [TestCase(0.0, 1.0)]
         [TestCase(-2.0, 1.0)]
         [TestCase(double.NaN, 1.0)]
+        [TestCase(double.PositiveInfinity, 1.0)]
         [TestCase(2.5, 2.5)]
         public void LottiePlayer_AnimationSpeed_NonPositiveNeverReachesJs(double speed, double expected)
         {
