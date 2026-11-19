@@ -449,7 +449,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         }
     }
 
-    #region Compoinent Lifecycle
+    #region Component Lifecycle
 
     /// <summary>
     /// OnAfterRenderAsync override
