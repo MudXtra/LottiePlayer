@@ -416,7 +416,8 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
             Renderer = AnimationType.ToDescription(),
             Loop = Loop ? (object)(LoopCount > 0 ? LoopCount : true) : false,
             Direction = (int)AnimationDirection,
-            Speed = AnimationSpeed,
+            // same rule as SetSpeedAsync: a non-positive speed is ignored, the default stays in effect
+            Speed = double.IsFinite(AnimationSpeed) && AnimationSpeed > 0 ? AnimationSpeed : 1.0,
             SetSubFrame = AnimationOptions.SmoothFrameInterpolation,
             Quality = AnimationOptions.AnimationQuality.ToDescription(),
             EnterFrameEvent = CurrentFrameChanged.HasDelegate,

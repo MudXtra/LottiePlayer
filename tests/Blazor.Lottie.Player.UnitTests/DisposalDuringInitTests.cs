@@ -43,7 +43,7 @@ public class DisposalDuringInitTests : BunitTest
     }
 
     [Test]
-    public async Task Component_ScriptLoadFailure_IsNotClearedByToggingSrc()
+    public async Task Component_ScriptLoadFailure_IsNotClearedByTogglingSrc()
     {
         var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/loadLottieWeb.js");
         moduleMock.Setup<bool>("initialize", _ => true).SetResult(false);

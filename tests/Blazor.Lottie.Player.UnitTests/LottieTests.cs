@@ -139,6 +139,24 @@ namespace Blazor.Lottie.Player.UnitTests
             await FluentActions.Awaiting(async () => await comp.Instance.SetDirectionAsync(LottieAnimationDirection.Forward)).Should().ThrowAsync<InvalidOperationException>();
         }
 
+        [TestCase(0.0, 1.0)]
+        [TestCase(-2.0, 1.0)]
+        [TestCase(double.NaN, 1.0)]
+        [TestCase(double.PositiveInfinity, 1.0)]
+        [TestCase(2.5, 2.5)]
+        public void LottiePlayer_AnimationSpeed_InvalidNeverReachesJs(double speed, double expected)
+        {
+            var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
+            moduleMock.SetupVoid("initialize");
+
+            Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+                .Add(p => p.AnimationSpeed, speed));
+
+            var options = moduleMock.Invocations["initialize"].Single().Arguments[2].Should().BeOfType<LottiePlaybackOptions>().Subject;
+            options.Speed.Should().Be(expected);
+        }
+
         [Test]
         public void LottiePlayer_ThrowsIfJsModuleFailsToLoad()
         {
