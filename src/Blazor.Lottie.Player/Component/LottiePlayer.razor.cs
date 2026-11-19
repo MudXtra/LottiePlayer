@@ -21,6 +21,8 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     private string? _failMessage = null;
     private bool _lottieLoaded = false;
     private bool _loadAttempted = false;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private const string SrcFailMessage = "Src must be a valid JSON file path ending with .json";
     private const string LocalLottieSourceJs = "./_content/Blazor.Lottie.Player/lottie.min.js";
     /// <summary>
     /// The module used to control Lottie Player functionality.
@@ -372,6 +374,20 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// <exception cref="InvalidOperationException"></exception>
     private async Task InitializeLottieModule()
     {
+        // serialize (re)initialization so quick parameter changes cannot overlap
+        await _initLock.WaitAsync();
+        try
+        {
+            await InitializeLottieModuleCore();
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    private async Task InitializeLottieModuleCore()
+    {
         // dispose the existing module if it exists
         if (LottiePlayerModule != null && _initCount > 0)
         {
@@ -481,8 +497,11 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         // check if Src returns is json
         if (string.IsNullOrWhiteSpace(Src) || !Src.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
         {
-            _failMessage = "Src must be a valid JSON file path ending with .json";
-
+            _failMessage = SrcFailMessage;
+        }
+        else if (_failMessage == SrcFailMessage)
+        {
+            _failMessage = null;
         }
 
         // Check if any key parameters changed

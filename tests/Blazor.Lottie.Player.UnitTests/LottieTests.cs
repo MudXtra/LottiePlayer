@@ -1,7 +1,10 @@
 using System.Reflection;
 using AwesomeAssertions;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.JSInterop.Infrastructure;
 using Moq;
 
 namespace Blazor.Lottie.Player.UnitTests
@@ -366,6 +369,80 @@ namespace Blazor.Lottie.Player.UnitTests
             comp.SetParametersAndRender(p => p.Add(x => x.Src, "https://example.com/other.json"));
             int newInitCount = (int)field.GetValue(comp.Instance)!;
             newInitCount.Should().Be(initCount + 1);
+        }
+
+        [Test]
+        public void LottiePlayer_ClearsSrcFailMessageWhenSrcBecomesValid()
+        {
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "not-a-json-path.txt")
+            );
+            comp.Markup.Should().Contain("Src must be a valid JSON file path");
+
+            comp.SetParametersAndRender(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+            );
+
+            comp.Markup.Should().NotContain("Src must be a valid JSON file path");
+        }
+
+        [Test]
+        public async Task LottiePlayer_SerializesReinitialization()
+        {
+            var js = new OverlapTrackingJsRuntime();
+            Context.Services.AddSingleton<IJSRuntime>(js);
+
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/a.json")
+            );
+            comp.WaitForState(() => js.InitializeCompleted == 1, TimeSpan.FromSeconds(5));
+
+            // two quick parameter changes without awaiting the first
+            var first = comp.InvokeAsync(() => comp.Instance.SetParametersAsync(
+                ParameterView.FromDictionary(new Dictionary<string, object?> { ["Src"] = "https://example.com/b.json" })));
+            var second = comp.InvokeAsync(() => comp.Instance.SetParametersAsync(
+                ParameterView.FromDictionary(new Dictionary<string, object?> { ["Src"] = "https://example.com/c.json" })));
+            await Task.WhenAll(first, second);
+
+            js.MaxConcurrentInitializations.Should().Be(1);
+            js.InitializeCompleted.Should().Be(3);
+        }
+
+        private sealed class OverlapTrackingJsRuntime : IJSRuntime
+        {
+            private int _active;
+            public int MaxConcurrentInitializations;
+            public int InitializeCompleted;
+
+            public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
+                InvokeAsync<TValue>(identifier, CancellationToken.None, args);
+
+            public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args)
+            {
+                if (identifier == "import")
+                {
+                    var module = new Mock<IJSObjectReference>();
+                    module.Setup(m => m.InvokeAsync<bool>("initialize", It.IsAny<object?[]?>())).Returns(new ValueTask<bool>(true));
+                    module.Setup(m => m.InvokeAsync<IJSObjectReference?>("initialize", It.IsAny<object?[]?>()))
+                        .Returns(() => new ValueTask<IJSObjectReference?>(InitializeAnimationAsync()));
+                    return new ValueTask<TValue>((TValue)module.Object);
+                }
+                throw new InvalidOperationException($"Unexpected call {identifier}");
+            }
+
+            private async Task<IJSObjectReference?> InitializeAnimationAsync()
+            {
+                var now = Interlocked.Increment(ref _active);
+                int seen;
+                while ((seen = MaxConcurrentInitializations) < now && Interlocked.CompareExchange(ref MaxConcurrentInitializations, now, seen) != seen) { }
+                await Task.Delay(100);
+                Interlocked.Decrement(ref _active);
+                Interlocked.Increment(ref InitializeCompleted);
+                var anim = new Mock<IJSObjectReference>();
+                anim.Setup(a => a.InvokeAsync<IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>())).Returns(new ValueTask<IJSVoidResult>(default(IJSVoidResult)!));
+                anim.Setup(a => a.DisposeAsync()).Returns(ValueTask.CompletedTask);
+                return anim.Object;
+            }
         }
     }
 }
