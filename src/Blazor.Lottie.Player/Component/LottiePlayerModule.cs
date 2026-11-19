@@ -57,7 +57,14 @@ public class LottiePlayerModule : IAsyncDisposable
     {
         if (_isDisposing || _js is null) return false;
         var _module = await _js.InvokeAsync<IJSObjectReference?>("import", "./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
-        _lottieAnimationRef = await _module!.InvokeAsync<IJSObjectReference?>("initialize", _dotNetReference, _elementRef, lottiePlaybackOptions);
+        var animationRef = await _module!.InvokeAsync<IJSObjectReference?>("initialize", _dotNetReference, _elementRef, lottiePlaybackOptions);
+        if (_isDisposing)
+        {
+            // disposed while the JS side was initializing: release the animation nobody will own
+            await DestroyAnimationAsync(animationRef);
+            return false;
+        }
+        _lottieAnimationRef = animationRef;
         if (lottiePlaybackOptions.AutoPlay)
         {
             await PlayAsync();
@@ -260,25 +267,7 @@ public class LottiePlayerModule : IAsyncDisposable
         {
             var animationRef = _lottieAnimationRef;
             _lottieAnimationRef = null;
-            if (animationRef is not null)
-            {
-                try
-                {
-                    await animationRef.InvokeVoidAsync("destroy");
-                }
-                catch (Exception ex) when (IsIgnorableDisposeException(ex))
-                {
-                    // The JS side may already be gone (circuit lost, page navigated, module disposed).
-                }
-                try
-                {
-                    await animationRef.DisposeAsync();
-                }
-                catch (Exception ex) when (IsIgnorableDisposeException(ex))
-                {
-                    // Same as above: nothing left to release on the JS side.
-                }
-            }
+            await DestroyAnimationAsync(animationRef);
         }
         finally
         {
@@ -286,6 +275,27 @@ public class LottiePlayerModule : IAsyncDisposable
             _dotNetReference = null;
         }
         GC.SuppressFinalize(this);
+    }
+
+    private static async Task DestroyAnimationAsync(IJSObjectReference? animationRef)
+    {
+        if (animationRef is null) return;
+        try
+        {
+            await animationRef.InvokeVoidAsync("destroy");
+        }
+        catch (Exception ex) when (IsIgnorableDisposeException(ex))
+        {
+            // The JS side may already be gone (circuit lost, page navigated, module disposed).
+        }
+        try
+        {
+            await animationRef.DisposeAsync();
+        }
+        catch (Exception ex) when (IsIgnorableDisposeException(ex))
+        {
+            // Same as above: nothing left to release on the JS side.
+        }
     }
 
     private static bool IsIgnorableDisposeException(Exception ex) =>
