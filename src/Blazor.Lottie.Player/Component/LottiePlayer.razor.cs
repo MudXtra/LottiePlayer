@@ -532,11 +532,20 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
             reInitialize = true;
         }
 
+        // Always run the base lifecycle (OnParametersSet[Async] and the render) once per parameter set.
+        // base consumes the ParameterView synchronously, so it must be called before any await.
+        var baseTask = base.SetParametersAsync(parameters);
         if (reInitialize && _initCount > 0)
         {
-            return InitializeLottieModule();
+            return ReInitializeAfterAsync(baseTask);
         }
-        return base.SetParametersAsync(parameters);
+        return baseTask;
+    }
+
+    private async Task ReInitializeAfterAsync(Task baseTask)
+    {
+        await baseTask;
+        await InitializeLottieModule();
     }
 
     /// <summary>
