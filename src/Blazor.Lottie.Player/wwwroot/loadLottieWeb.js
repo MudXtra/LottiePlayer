@@ -35,7 +35,7 @@ export function injectJsLibrary(source) {
     }
     const existing = document.querySelector("script[data-bodymovinjs]");
     if (existing) {
-        // Another source is mid-load (or the tag came from elsewhere): follow that load, not a poll.
+        // Our own tracked load for another source is in flight: follow it rather than polling.
         // If it fails, this source has not been tried yet, so try it once on its own.
         // A tag we did not inject (no tracked load) is only polled once: retrying here would loop forever.
         if (!currentTagLoad) return new Promise(waitForLottie);

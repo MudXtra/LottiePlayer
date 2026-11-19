@@ -144,7 +144,7 @@ namespace Blazor.Lottie.Player.UnitTests
         [TestCase(double.NaN, 1.0)]
         [TestCase(double.PositiveInfinity, 1.0)]
         [TestCase(2.5, 2.5)]
-        public void LottiePlayer_AnimationSpeed_NonPositiveNeverReachesJs(double speed, double expected)
+        public void LottiePlayer_AnimationSpeed_InvalidNeverReachesJs(double speed, double expected)
         {
             var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/lottiePlayerModule.js");
             moduleMock.SetupVoid("initialize");
