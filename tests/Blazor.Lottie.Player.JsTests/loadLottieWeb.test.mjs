@@ -1,0 +1,86 @@
+// Run: node --test tests/Blazor.Lottie.Player.JsTests
+// Models script-tag loading with a stub DOM; the loader is the real wwwroot/loadLottieWeb.js.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+
+const loaderUrl = pathToFileURL(path.resolve(import.meta.dirname, "../../src/Blazor.Lottie.Player/wwwroot/loadLottieWeb.js")).href;
+let n = 0;
+
+// behaviours: map of source prefix -> { delay, outcome: "load" | "error" | "load-nolottie" }
+async function setup(behaviours) {
+    const scripts = [];
+    globalThis.window = globalThis;
+    delete globalThis.lottie;
+    globalThis.document = {
+        querySelector: () => scripts.find((s) => s.attached) ?? null,
+        createElement: () => ({ setAttribute() {}, remove() { this.attached = false; } }),
+        head: {
+            appendChild(s) {
+                s.attached = true;
+                scripts.push(s);
+                const b = behaviours.find((x) => s.src.startsWith(x.prefix));
+                setTimeout(() => {
+                    if (b.outcome === "error") s.onerror();
+                    else {
+                        if (b.outcome === "load") globalThis.lottie = {};
+                        s.onload();
+                    }
+                }, b.delay);
+            },
+        },
+    };
+    console.error = () => {};
+    const mod = await import(`${loaderUrl}?t=${n++}`); // fresh module state per test
+    return { mod, scripts };
+}
+
+const CDN = "https://cdn/lottie.min.js";
+const LOCAL = "./_content/lottie.min.js";
+
+// mirrors LottiePlayer.OnAfterRenderAsync: CDN once, then local once
+async function player(mod, delay) {
+    await new Promise((r) => setTimeout(r, delay));
+    let ok = await mod.initialize(CDN);
+    if (!ok) ok = await mod.initialize(LOCAL);
+    return ok;
+}
+
+test("slow CDN success: every player loads and one tag is injected", async () => {
+    const { mod, scripts } = await setup([{ prefix: "https://", delay: 2500, outcome: "load" }]);
+    const results = await Promise.all([player(mod, 0), player(mod, 10), player(mod, 20)]);
+    assert.deepEqual(results, [true, true, true]);
+    assert.equal(scripts.length, 1);
+});
+
+test("slow CDN failure with local fallback: every player loads", async () => {
+    const { mod, scripts } = await setup([
+        { prefix: "https://", delay: 2500, outcome: "error" },
+        { prefix: "./", delay: 100, outcome: "load" },
+    ]);
+    const results = await Promise.all([player(mod, 0), player(mod, 10), player(mod, 20)]);
+    assert.deepEqual(results, [true, true, true]);
+    assert.equal(scripts.length, 2); // one CDN tag, one local tag
+});
+
+test("both sources fail: all players fail and the load is bounded", async () => {
+    const { mod } = await setup([
+        { prefix: "https://", delay: 300, outcome: "error" },
+        { prefix: "./", delay: 300, outcome: "error" },
+    ]);
+    const t0 = Date.now();
+    const results = await Promise.all([player(mod, 0), player(mod, 10)]);
+    assert.deepEqual(results, [false, false]);
+    assert.ok(Date.now() - t0 < 3000);
+});
+
+test("script loads but window.lottie never appears: tag removed so local fallback can inject", async () => {
+    const { mod, scripts } = await setup([
+        { prefix: "https://", delay: 10, outcome: "load-nolottie" },
+        { prefix: "./", delay: 10, outcome: "load" },
+    ]);
+    assert.equal(await player(mod, 0), true);
+    assert.equal(scripts.length, 2);
+    assert.equal(scripts[0].attached, false);
+});
