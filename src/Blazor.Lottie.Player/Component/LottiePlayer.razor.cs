@@ -476,7 +476,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
         // load the Lottie Web Player JS from the configured source (CDN by default)
         var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
         if (_disposed) return;
-        _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs);
+        _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs, AnimationOptions.LottieSourceJsIntegrity);
         if (_disposed) return;
         if (!_lottieLoaded)
         {

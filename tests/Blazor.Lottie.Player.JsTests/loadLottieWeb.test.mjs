@@ -108,3 +108,45 @@ test("P4: a foreign data-bodymovinjs tag that never yields lottie: initialize te
     assert.equal(settled.v, false);
     assert.equal(scripts.length, 1, "no tag injected next to the foreign one");
 });
+
+const HASH = "sha512-uOtp2vx2X/5+tLBEf5UoQyqwAkFZJBM5XwGa7BfXDnWR+wdpRvlSVzaIVcRe3tGNsStu6UMDCeXKEnr4IBT8gA==";
+
+test("SRI: a source with an integrity value gets integrity and crossorigin=anonymous", async () => {
+    const { mod, scripts } = await setup([{ prefix: "https://", delay: 10, outcome: "load" }]);
+    assert.equal(await mod.initialize(CDN, HASH), true);
+    assert.equal(scripts.length, 1);
+    assert.equal(scripts[0].integrity, HASH);
+    assert.equal(scripts[0].crossOrigin, "anonymous");
+});
+
+test("SRI: a custom source without an integrity value gets neither attribute", async () => {
+    const { mod, scripts } = await setup([{ prefix: "https://", delay: 10, outcome: "load" }]);
+    assert.equal(await mod.initialize("https://other.example/lottie.js", undefined), true);
+    assert.equal(scripts.length, 1);
+    assert.equal(scripts[0].integrity, undefined);
+    assert.equal(scripts[0].crossOrigin, undefined);
+});
+
+test("SRI: an empty integrity value is treated as none", async () => {
+    const { mod, scripts } = await setup([{ prefix: "https://", delay: 10, outcome: "load" }]);
+    assert.equal(await mod.initialize(CDN, ""), true);
+    assert.equal(scripts[0].integrity, undefined);
+    assert.equal(scripts[0].crossOrigin, undefined);
+});
+
+test("SRI: an integrity failure (script error) falls back to the local copy, which carries no integrity", async () => {
+    const { mod, scripts } = await setup([
+        { prefix: "https://", delay: 10, outcome: "error" },
+        { prefix: "./", delay: 10, outcome: "load" },
+    ]);
+    // mirrors LottiePlayer.OnAfterRenderAsync: configured source with its integrity, then the local copy once
+    let ok = await mod.initialize(CDN, HASH);
+    assert.equal(ok, false);
+    ok = await mod.initialize(LOCAL);
+    assert.equal(ok, true);
+    assert.equal(scripts.length, 2);
+    assert.equal(scripts[0].integrity, HASH);
+    assert.equal(scripts[1].src, LOCAL);
+    assert.equal(scripts[1].integrity, undefined);
+    assert.equal(scripts[1].crossOrigin, undefined);
+});
