@@ -39,7 +39,9 @@ There are two ways to use Blazor Lottie Player:
 - Include the Lottie Web library (The LottiePlayer component loads it from the below CDN):
 
   ```html
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.13.0/lottie.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.13.0/lottie.min.js"
+          integrity="sha512-uOtp2vx2X/5+tLBEf5UoQyqwAkFZJBM5XwGa7BfXDnWR+wdpRvlSVzaIVcRe3tGNsStu6UMDCeXKEnr4IBT8gA=="
+          crossorigin="anonymous"></script>
   ```
  
 - Instantiate and use the `LottiePlayer` class in your code-behind or component logic:

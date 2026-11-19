@@ -10,13 +10,14 @@ function hasLottie() {
     return !!window.lottie && typeof window.lottie === "object";
 }
 
-export async function initialize(source) {
+// integrity (optional): Subresource Integrity value applied only to the script tag injected for `source`.
+export async function initialize(source, integrity) {
     try {
         if (hasLottie()) {
             // Lottie is already loaded
             return true;
         }
-        await injectJsLibrary(source);
+        await injectJsLibrary(source, integrity);
         return hasLottie();
     }
     catch (error) {
@@ -25,7 +26,7 @@ export async function initialize(source) {
     }
 }
 
-export function injectJsLibrary(source) {
+export function injectJsLibrary(source, integrity) {
     if (hasLottie()) {
         return Promise.resolve();
     }
@@ -39,12 +40,17 @@ export function injectJsLibrary(source) {
         // If it fails, this source has not been tried yet, so try it once on its own.
         // A tag we did not inject (no tracked load) is only polled once: retrying here would loop forever.
         if (!currentTagLoad) return new Promise(waitForLottie);
-        return currentTagLoad.catch(() => (hasLottie() ? undefined : injectJsLibrary(source)));
+        return currentTagLoad.catch(() => (hasLottie() ? undefined : injectJsLibrary(source, integrity)));
     }
     const load = new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.setAttribute("data-bodymovinjs", "true");
         script.type = "text/javascript";
+        if (integrity) {
+            // a failed integrity check fires onerror, which lets the caller fall back to the local copy
+            script.integrity = integrity;
+            script.crossOrigin = "anonymous";
+        }
         script.src = source;
 
         script.onload = () => waitForLottie(resolve, (error) => {
