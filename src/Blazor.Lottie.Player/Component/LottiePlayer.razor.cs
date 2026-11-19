@@ -27,6 +27,7 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     // AvailableWaitHandle a SemaphoreSlim holds no unmanaged resources. Disposal is coordinated by _disposed.
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private volatile bool _disposed;
+    private int _initGeneration;
     private const string SrcFailMessage = "Src must be a valid JSON file path ending with .json";
     private const string LocalLottieSourceJs = "./_content/Blazor.Lottie.Player/lottie.min.js";
     /// <summary>
@@ -381,9 +382,13 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     {
         // serialize (re)initialization so quick parameter changes cannot overlap
         if (_disposed) return;
+        // coalesce: a request still waiting for the lock is dropped when a newer one arrives, because the
+        // newer request reads the final parameters when it runs
+        var generation = Interlocked.Increment(ref _initGeneration);
         await _initLock.WaitAsync();
         try
         {
+            if (generation != Volatile.Read(ref _initGeneration)) return;
             await InitializeLottieModuleCore();
         }
         finally
