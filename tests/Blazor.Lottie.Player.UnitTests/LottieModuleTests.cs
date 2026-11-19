@@ -245,4 +245,17 @@ public class LottieModuleTests : BunitTest
         module._dotNetReference.Should().BeNull();
         Assert.Throws<ObjectDisposedException>(() => _ = dotNetRef!.Value);
     }
+
+    [TestCase(0d)]
+    [TestCase(-1d)]
+    public async Task LottiePlayerModule_SetSpeed_RejectsNonPositiveSpeed(double speed)
+    {
+        var (module, animationRef) = CreateModuleWithMockedRef();
+        await module.SetSpeedAsync(speed);
+        animationRef.Verify(r => r.InvokeAsync<IJSVoidResult>("setSpeed", It.IsAny<object?[]?>()), Times.Never);
+
+        await module.SetSpeedAsync(0.5);
+        animationRef.Verify(r => r.InvokeAsync<IJSVoidResult>("setSpeed",
+            It.Is<object?[]?>(a => a!.Length == 1 && (double)a[0]! == 0.5d)), Times.Once);
+    }
 }

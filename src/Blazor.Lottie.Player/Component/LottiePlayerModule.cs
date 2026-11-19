@@ -121,10 +121,10 @@ public class LottiePlayerModule : IAsyncDisposable
     /// <summary>
     /// Asynchronously sets the speed for the associated animation. 1 is normal speed, 2 is double speed, 0.5 is half speed, etc.
     /// </summary>
-    /// <param name="speed">The speed value to set. Must be a non-negative number.</param>
+    /// <param name="speed">The speed value to set. Must be greater than 0.</param>
     public ValueTask SetSpeedAsync(double speed)
     {
-        if (!CanExecute || speed < 0) return ValueTask.CompletedTask;
+        if (!CanExecute || speed <= 0) return ValueTask.CompletedTask;
         return _lottieAnimationRef!.InvokeVoidAsync("setSpeed", speed);
     }
 
