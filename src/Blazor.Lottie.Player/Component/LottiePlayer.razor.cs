@@ -20,6 +20,8 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     public readonly string ElementId = Identifier.Create("lottie-");
     private string? _failMessage = null;
     private bool _lottieLoaded = false;
+    private bool _loadAttempted = false;
+    private const string LocalLottieSourceJs = "./_content/Blazor.Lottie.Player/lottie.min.js";
     /// <summary>
     /// The module used to control Lottie Player functionality.
     /// </summary>
@@ -438,20 +440,24 @@ public partial class LottiePlayer : ComponentBase, IAsyncDisposable
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender || !_lottieLoaded)
+        if (_lottieLoaded || _loadAttempted) return;
+        _loadAttempted = true;
+
+        // load the Lottie Web Player JS from the configured source (CDN by default)
+        var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
+        _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", AnimationOptions.LottieSourceJs);
+        if (!_lottieLoaded)
         {
-            // load the Lottie Web Player JS from CDN
-            var initModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./_content/Blazor.Lottie.Player/loadLottieWeb.js");
-            // if cdn failed on 2nd try let's swap to local copy
-            var initJs = firstRender ? AnimationOptions.LottieSourceJs : "./_content/Blazor.Lottie.Player/lottie.min.js";
-            _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", initJs);
-            if (!_lottieLoaded)
-            {
-                StateHasChanged();
-                return;
-            }
-            await InitializeLottieModule();
+            // fall back to the local copy exactly once
+            _lottieLoaded = await initModule.InvokeAsync<bool>("initialize", LocalLottieSourceJs);
         }
+        if (!_lottieLoaded)
+        {
+            _failMessage = "Failed to load the Lottie Web Player script.";
+            StateHasChanged();
+            return;
+        }
+        await InitializeLottieModule();
     }
 
     /// <summary>

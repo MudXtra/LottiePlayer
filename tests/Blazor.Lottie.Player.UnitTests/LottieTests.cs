@@ -139,18 +139,37 @@ namespace Blazor.Lottie.Player.UnitTests
         [Test]
         public void LottiePlayer_ThrowsIfJsModuleFailsToLoad()
         {
+            // Both the CDN and the local fallback fail: bounded attempts, failure message, no throw, no render loop.
             var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/loadLottieWeb.js");
-            moduleMock.Setup<bool>("initialize", _ => false);
+            moduleMock.Setup<bool>("initialize", _ => true).SetResult(false);
 
-            var ex = Assert.Throws<InvalidOperationException>(() =>
-                Context.RenderComponent<LottiePlayer>(parameters => parameters
-                    .Add(p => p.Src, "https://example.com/lottie.json")
-                )
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
             );
-            ex.Message.Should().Contain("Failed to initialize Lottie Web Player Module");
+
+            comp.Markup.Should().Contain("Failed to load the Lottie Web Player script");
+            comp.Instance.LottiePlayerModule.Should().BeNull();
+            var calls = moduleMock.Invocations["initialize"].ToList();
+            calls.Should().HaveCount(2);
+            calls[0].Arguments[0].Should().Be("https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.13.0/lottie.min.js");
+            calls[1].Arguments[0].Should().Be("./_content/Blazor.Lottie.Player/lottie.min.js");
         }
 
+        [Test]
+        public void LottiePlayer_FallsBackToLocalScriptWhenCdnFails()
+        {
+            var moduleMock = Context.JSInterop.SetupModule("./_content/Blazor.Lottie.Player/loadLottieWeb.js");
+            moduleMock.Setup<bool>("initialize", a => (string)a.Arguments[0]! != "./_content/Blazor.Lottie.Player/lottie.min.js").SetResult(false);
+            moduleMock.Setup<bool>("initialize", a => (string)a.Arguments[0]! == "./_content/Blazor.Lottie.Player/lottie.min.js").SetResult(true);
 
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/lottie.json")
+            );
+
+            comp.Markup.Should().NotContain("Failed to load");
+            comp.Instance.LottiePlayerModule.Should().NotBeNull();
+            moduleMock.Invocations["initialize"].Should().HaveCount(2);
+        }
 
         [Test]
         public void LottiePlayer_InitShouldReinitReasonably()

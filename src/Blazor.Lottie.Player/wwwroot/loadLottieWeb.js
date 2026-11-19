@@ -35,7 +35,11 @@ export async function injectJsLibrary(source) {
         script.src = source;
 
         script.onload = () => waitForLottie(resolve, reject);
-        script.onerror = () => reject(new Error(`Failed to load ${source}`));
+        script.onerror = () => {
+            // remove the failed tag so a fallback source can be injected
+            script.remove();
+            reject(new Error(`Failed to load ${source}`));
+        };
 
         document.head.appendChild(script);
     });
