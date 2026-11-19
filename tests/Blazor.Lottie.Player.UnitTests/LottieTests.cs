@@ -129,7 +129,7 @@ namespace Blazor.Lottie.Player.UnitTests
             );
             // Simulate module disposal
             comp.Instance.LottiePlayerModule.Should().NotBeNull();
-            await comp.InvokeAsync(() => comp.Instance.DisposeAsync());
+            await comp.InvokeAsync(async () => await comp.Instance.DisposeAsync());
             comp.Instance.LottiePlayerModule.Should().BeNull();
 
             await FluentActions.Awaiting(async () => await comp.Instance.PlayAnimationAsync()).Should().ThrowAsync<InvalidOperationException>();
