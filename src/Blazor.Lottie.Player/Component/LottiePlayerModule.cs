@@ -98,24 +98,24 @@ public class LottiePlayerModule : IAsyncDisposable
     /// Moves the animation to the specified frame and starts playback from that point.
     /// </summary>
     /// <param name="frame">The frame number to move the animation to. Must be a non-negative value.</param>
-    /// <param name="force">A boolean value indicating whether to force the animation to move to the specified frame  even if it is already
-    /// playing.  <see langword="true"/> to force the action; otherwise, <see langword="false"/>.</param>
+    /// <param name="force">Retained for source compatibility; it no longer has any effect. <paramref name="frame"/> is always
+    /// interpreted as a frame number (not a 0-1 fraction of the total frames).</param>
     public ValueTask GoToAndPlay(double frame, bool force = false)
     {
         if (!CanExecute) return ValueTask.CompletedTask;
-        return _lottieAnimationRef!.InvokeVoidAsync("goToAndPlay", frame, force);
+        return _lottieAnimationRef!.InvokeVoidAsync("goToAndPlay", frame, true);
     }
 
     /// <summary>
     /// Moves the animation to the specified frame and stops playback at that point.
     /// </summary>
     /// <param name="frame">The frame number to move the animation to. Must be a non-negative value.</param>
-    /// <param name="force">A boolean value indicating whether to force the animation to move to the specified frame  even if it is already
-    /// playing.  <see langword="true"/> to force the action; otherwise, <see langword="false"/>.</param>
+    /// <param name="force">Retained for source compatibility; it no longer has any effect. <paramref name="frame"/> is always
+    /// interpreted as a frame number (not a 0-1 fraction of the total frames).</param>
     public ValueTask GoToAndStop(double frame, bool force = false)
     {
         if (!CanExecute) return ValueTask.CompletedTask;
-        return _lottieAnimationRef!.InvokeVoidAsync("goToAndStop", frame, force);
+        return _lottieAnimationRef!.InvokeVoidAsync("goToAndStop", frame, true);
     }
 
     /// <summary>

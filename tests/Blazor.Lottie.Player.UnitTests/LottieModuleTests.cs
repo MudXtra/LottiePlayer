@@ -1,5 +1,7 @@
 using AwesomeAssertions;
 using Bunit;
+using Microsoft.JSInterop;
+using Microsoft.JSInterop.Infrastructure;
 using Moq;
 
 namespace Blazor.Lottie.Player.UnitTests;
@@ -171,5 +173,37 @@ public class LottieModuleTests : BunitTest
         eventTriggered.Should().BeFalse();
 
         Context.JSInterop.VerifyInvoke("destroy");
+    }
+
+    private static (LottiePlayerModule Module, Mock<IJSObjectReference> Ref) CreateModuleWithMockedRef()
+    {
+        var js = new Mock<IJSRuntime>();
+        var animationRef = new Mock<IJSObjectReference>();
+        animationRef
+            .Setup(r => r.InvokeAsync<IJSVoidResult>(It.IsAny<string>(), It.IsAny<object?[]?>()))
+            .Returns(new ValueTask<IJSVoidResult>(default(IJSVoidResult)!));
+        animationRef.Setup(r => r.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var module = new LottiePlayerModule(js.Object, default) { _lottieAnimationRef = animationRef.Object };
+        return (module, animationRef);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task LottiePlayerModule_GoToAndPlay_SendsFrameFlag(bool force)
+    {
+        var (module, animationRef) = CreateModuleWithMockedRef();
+        await module.GoToAndPlay(12, force);
+        animationRef.Verify(r => r.InvokeAsync<IJSVoidResult>("goToAndPlay",
+            It.Is<object?[]?>(a => a!.Length == 2 && (double)a[0]! == 12d && (bool)a[1]! == true)), Times.Once);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task LottiePlayerModule_GoToAndStop_SendsFrameFlag(bool force)
+    {
+        var (module, animationRef) = CreateModuleWithMockedRef();
+        await module.GoToAndStop(12, force);
+        animationRef.Verify(r => r.InvokeAsync<IJSVoidResult>("goToAndStop",
+            It.Is<object?[]?>(a => a!.Length == 2 && (double)a[0]! == 12d && (bool)a[1]! == true)), Times.Once);
     }
 }
