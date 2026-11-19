@@ -427,11 +427,34 @@ namespace Blazor.Lottie.Player.UnitTests
             js.InitializeCompleted.Should().Be(3);
         }
 
+        [Test]
+        public async Task LottiePlayer_RerenderWhileScriptLoads_InitializesOnce()
+        {
+            // issue #1: a re-render while the lottie script is still loading must not start a second animation in the same container
+            var js = new OverlapTrackingJsRuntime { ScriptLoad = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously) };
+            Context.Services.AddSingleton<IJSRuntime>(js);
+
+            var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
+                .Add(p => p.Src, "https://example.com/a.json")
+                .Add(p => p.AutoPlay, false)
+            );
+            // parent re-renders (new EventCallback delegate each time) while the script load is pending
+            comp.SetParametersAndRender(parameters => parameters.Add(p => p.AnimationReady, EventCallback.Factory.Create<LottiePlayerLoadedEventArgs>(this, _ => { })));
+            comp.SetParametersAndRender(parameters => parameters.Add(p => p.AnimationReady, EventCallback.Factory.Create<LottiePlayerLoadedEventArgs>(this, _ => { })));
+            js.ScriptLoad.SetResult(true);
+            comp.WaitForState(() => js.InitializeCompleted >= 1, TimeSpan.FromSeconds(5));
+            await Task.Delay(300);
+
+            js.InitializeCompleted.Should().Be(1);
+            await comp.InvokeAsync(() => comp.Instance.DisposeAsync().AsTask());
+        }
+
         private sealed class OverlapTrackingJsRuntime : IJSRuntime
         {
             private int _active;
             public int MaxConcurrentInitializations;
             public int InitializeCompleted;
+            public TaskCompletionSource<bool>? ScriptLoad;
 
             public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) =>
                 InvokeAsync<TValue>(identifier, CancellationToken.None, args);
@@ -441,7 +464,7 @@ namespace Blazor.Lottie.Player.UnitTests
                 if (identifier == "import")
                 {
                     var module = new Mock<IJSObjectReference>();
-                    module.Setup(m => m.InvokeAsync<bool>("initialize", It.IsAny<object?[]?>())).Returns(new ValueTask<bool>(true));
+                    module.Setup(m => m.InvokeAsync<bool>("initialize", It.IsAny<object?[]?>())).Returns(() => ScriptLoad is null ? new ValueTask<bool>(true) : new ValueTask<bool>(ScriptLoad.Task));
                     module.Setup(m => m.InvokeAsync<IJSObjectReference?>("initialize", It.IsAny<object?[]?>()))
                         .Returns(() => new ValueTask<IJSObjectReference?>(InitializeAnimationAsync()));
                     return new ValueTask<TValue>((TValue)module.Object);
