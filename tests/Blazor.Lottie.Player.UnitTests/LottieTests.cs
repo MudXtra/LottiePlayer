@@ -357,7 +357,7 @@ namespace Blazor.Lottie.Player.UnitTests
         }
 
         [Test]
-        public async Task LottiePlayer_InitCount_AfterDisposeAndReinit()
+        public async Task LottiePlayer_DoesNotReinitializeAfterDispose()
         {
             var comp = Context.RenderComponent<LottiePlayer>(parameters => parameters
                 .Add(p => p.Src, "https://example.com/lottie.json")
@@ -365,10 +365,11 @@ namespace Blazor.Lottie.Player.UnitTests
             var field = typeof(LottiePlayer).GetField("_initCount", BindingFlags.NonPublic | BindingFlags.Instance);
             int initCount = (int)field!.GetValue(comp.Instance)!;
             await comp.Instance.DisposeAsync();
-            // Re-initialize by changing a key parameter
+            // A key parameter change on a disposed component must not build a new module (it would never be disposed)
             comp.SetParametersAndRender(p => p.Add(x => x.Src, "https://example.com/other.json"));
             int newInitCount = (int)field.GetValue(comp.Instance)!;
-            newInitCount.Should().Be(initCount + 1);
+            newInitCount.Should().Be(initCount);
+            comp.Instance.LottiePlayerModule.Should().BeNull();
         }
 
         [Test]
