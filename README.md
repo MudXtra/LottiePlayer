@@ -66,10 +66,23 @@ There are two ways to use Blazor Lottie Player:
   player.OnLoopComplete += () => { /* Handle Loop Complete */ };
   ```
 
-### 4. Read the Docs
+### 4. Get Animations
+
+Blazor Lottie Player plays animations; it doesn't ship any. Point `Src` at a Lottie JSON file you host or link to. Some places to find or make one:
+
+- [LottieFiles](https://lottiefiles.com/free-animations): the largest library, with many free animations.
+- [Lordicon](https://lordicon.com/): animated icons.
+- [useAnimations](https://useanimations.com/): small UI micro-animations.
+- Make your own in After Effects and export with [Bodymovin](https://github.com/airbnb/lottie-web).
+
+Each animation comes with its own license from its creator, so check it before you ship. Blazor Lottie Player is not affiliated with Airbnb or LottieFiles.
+
+For a working example, see the [Blazor Lottie Player documentation](https://mudx.org/docs/lottie).
+
+### 5. Read the Docs
 
 Visit the [Blazor Lottie Player documentation](https://mudx.org/docs/lottie) for detailed usage instructions, examples, and API reference.
 
-### 5. Get Help, Support, or Contribute
+### 6. Get Help, Support, or Contribute
 
 If you need help, want to report an issue, or would like to support or contribute to the project, please visit the [GitHub repository](https://github.com/MudXtra/LottiePlayer) for more information.
